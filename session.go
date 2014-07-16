@@ -41,6 +41,21 @@ type SessionStore interface {
 	Flush() error                         //delete all data
 }
 
+type Flash struct {
+	url.Values
+	ErrorMsg, SuccessMsg string
+}
+
+func (f *Flash) Error(msg string) {
+	f.Set("error", msg)
+	f.ErrorMsg = msg
+}
+
+func (f *Flash) Success(msg string) {
+	f.Set("success", msg)
+	f.SuccessMsg = msg
+}
+
 type SessionOptions struct {
 	// Name of provider. Default is memory.
 	Provider string
@@ -84,20 +99,38 @@ func prepareOptions(options []SessionOptions) SessionOptions {
 // An single variadic session.SessionOptions struct can be optionally provided to configure.
 func Sessioner(options ...SessionOptions) macaron.Handler {
 	opt := prepareOptions(options)
-	return func(ctx *macaron.Context, resp http.ResponseWriter, req *http.Request) {
-		manager, err := NewManager(opt.Provider,
-			fmt.Sprintf(`{"cookieName":"%s","gclifetime":%d,"providerConfig":"%s"}`,
-				opt.CookieName, opt.Interval, opt.ProviderConfig))
-		if err != nil {
-			panic(err)
-		}
-		go manager.GC()
+	manager, err := NewManager(opt.Provider,
+		fmt.Sprintf(`{"cookieName":"%s","gclifetime":%d,"providerConfig":"%s"}`,
+			opt.CookieName, opt.Interval, opt.ProviderConfig))
+	if err != nil {
+		panic(err)
+	}
+	go manager.GC()
 
+	return func(ctx *macaron.Context, resp http.ResponseWriter, req *http.Request) {
 		sess := manager.SessionStart(resp, req)
-		ctx.Map(sess)
+
+		// Get flash.
+		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
+		if len(vals) > 0 {
+			f := &Flash{Values: vals}
+			f.ErrorMsg = f.Get("error")
+			f.SuccessMsg = f.Get("success")
+			ctx.Data["Flash"] = f
+			ctx.SetCookie("macaron_flash", "", -1)
+		}
+
+		f := &Flash{Values: url.Values{}}
 		resp.(macaron.ResponseWriter).Before(func(macaron.ResponseWriter) {
 			sess.SessionRelease(resp)
+
+			if flash := f.Encode(); len(flash) > 0 {
+				ctx.SetCookie("macaron_flash", flash, 0)
+			}
 		})
+
+		ctx.Map(f)
+		ctx.Map(sess)
 	}
 }
 

@@ -21,6 +21,15 @@ func main() {
 		sess.Set("session", "session middleware")
 		return sess.Get("session")
 	})
+	
+	m.Get("/signup", func(ctx *macaron.Context, f *session.Flash) {
+		f.Success("yes!!!")
+		f.Error("opps...")
+		// Use following fields in template
+		// - {{.Flash.SuccessMsg}}
+		// - {{.Flash.ErrorMsg}}
+		ctx.HTML(200, "signup", ctx.Data)
+	})
 
 	m.Run()
 }
