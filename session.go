@@ -13,6 +13,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
+// Package session a middleware that provides the session manager of Macaron.
 package session
 
 import (
@@ -21,7 +22,6 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -59,12 +59,8 @@ func (f *Flash) Success(msg string) {
 type SessionOptions struct {
 	// Name of provider. Default is memory.
 	Provider string
-	// Key name store in cookie. Default is "macaronSession".
-	CookieName string
-	// GC interval. Default is 3600.
-	Interval int
 	// Provider configuration string.
-	ProviderConfig string
+	Config
 }
 
 func prepareOptions(options []SessionOptions) SessionOptions {
@@ -77,19 +73,21 @@ func prepareOptions(options []SessionOptions) SessionOptions {
 	if len(opt.Provider) == 0 {
 		opt.Provider = "memory"
 	}
-
+	opt.EnableSetCookie = true
 	if len(opt.CookieName) == 0 {
 		opt.CookieName = "macaronSession"
 	}
-
-	if opt.Provider == "memory" {
-		if opt.Interval == 0 {
-			opt.Interval = 3600
-		}
-	} else {
-		if len(opt.ProviderConfig) == 0 {
-			panic("no provider configuration string is given for non-memory session provider")
-		}
+	if opt.Gclifetime == 0 {
+		opt.Gclifetime = 3600
+	}
+	if opt.Maxlifetime == 0 {
+		opt.Maxlifetime = opt.Gclifetime
+	}
+	if opt.SessionIDHashFunc == "" {
+		opt.SessionIDHashFunc = "sha1"
+	}
+	if opt.SessionIDHashKey == "" {
+		opt.SessionIDHashKey = string(generateRandomKey(16))
 	}
 
 	return opt
@@ -99,16 +97,14 @@ func prepareOptions(options []SessionOptions) SessionOptions {
 // An single variadic session.SessionOptions struct can be optionally provided to configure.
 func Sessioner(options ...SessionOptions) macaron.Handler {
 	opt := prepareOptions(options)
-	manager, err := NewManager(opt.Provider,
-		fmt.Sprintf(`{"cookieName":"%s","gclifetime":%d,"providerConfig":"%s"}`,
-			opt.CookieName, opt.Interval, opt.ProviderConfig))
+	manager, err := NewManager(opt.Provider, &opt.Config)
 	if err != nil {
 		panic(err)
 	}
 	go manager.GC()
 
-	return func(ctx *macaron.Context, resp http.ResponseWriter, req *http.Request) {
-		sess := manager.SessionStart(resp, req)
+	return func(ctx *macaron.Context) {
+		sess := manager.SessionStart(ctx.RW(), ctx.Req)
 
 		// Get flash.
 		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
@@ -121,8 +117,8 @@ func Sessioner(options ...SessionOptions) macaron.Handler {
 		}
 
 		f := &Flash{Values: url.Values{}}
-		resp.(macaron.ResponseWriter).Before(func(macaron.ResponseWriter) {
-			sess.SessionRelease(resp)
+		ctx.RW().(macaron.ResponseWriter).Before(func(macaron.ResponseWriter) {
+			sess.SessionRelease(ctx.RW())
 
 			if flash := f.Encode(); len(flash) > 0 {
 				ctx.SetCookie("macaron_flash", flash, 0)
@@ -161,7 +157,7 @@ func Register(name string, provide Provider) {
 	provides[name] = provide
 }
 
-type managerConfig struct {
+type Config struct {
 	CookieName        string `json:"cookieName"`
 	EnableSetCookie   bool   `json:"enableSetCookie,omitempty"`
 	Gclifetime        int64  `json:"gclifetime"`
@@ -176,7 +172,7 @@ type managerConfig struct {
 // Manager contains Provider and its configuration.
 type Manager struct {
 	provider Provider
-	config   *managerConfig
+	config   *Config
 }
 
 // Create new Manager with provider name and json config string.
@@ -191,34 +187,19 @@ type Manager struct {
 // 2. hashfunc  default sha1
 // 3. hashkey default beegosessionkey
 // 4. maxage default is none
-func NewManager(provideName, config string) (*Manager, error) {
+func NewManager(provideName string, config *Config) (*Manager, error) {
 	provider, ok := provides[provideName]
 	if !ok {
 		return nil, fmt.Errorf("session: unknown provide %q (forgotten import?)", provideName)
 	}
-	cf := new(managerConfig)
-	cf.EnableSetCookie = true
-	err := json.Unmarshal([]byte(config), cf)
-	if err != nil {
-		return nil, err
-	}
-	if cf.Maxlifetime == 0 {
-		cf.Maxlifetime = cf.Gclifetime
-	}
-	err = provider.SessionInit(cf.Maxlifetime, cf.ProviderConfig)
-	if err != nil {
-		return nil, err
-	}
-	if cf.SessionIDHashFunc == "" {
-		cf.SessionIDHashFunc = "sha1"
-	}
-	if cf.SessionIDHashKey == "" {
-		cf.SessionIDHashKey = string(generateRandomKey(16))
-	}
 
+	err := provider.SessionInit(config.Maxlifetime, config.ProviderConfig)
+	if err != nil {
+		return nil, err
+	}
 	return &Manager{
-		provider,
-		cf,
+		provider: provider,
+		config:   config,
 	}, nil
 }
 

@@ -1,9 +1,13 @@
 session
 =======
 
-Middleware cache is the session manager of [Macaron](https://github.com/Unknwon/macaron). It can use many session providers, including cookie, memory, file, redis, memcache, PostgreSQL, MySQL, and couchbase.
+Middleware session is the session manager of [Macaron](https://github.com/Unknwon/macaron). It can use many session providers, including cookie, memory, file, redis, memcache, PostgreSQL, MySQL, and couchbase.
 
 [API Reference](https://gowalker.org/github.com/macaron-contrib/session)
+
+### Installation
+
+	go get github.com/macaron-contrib/session
 
 ## Usage
 
