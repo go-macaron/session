@@ -104,7 +104,7 @@ func Sessioner(options ...SessionOptions) macaron.Handler {
 	go manager.GC()
 
 	return func(ctx *macaron.Context) {
-		sess := manager.SessionStart(ctx.RW(), ctx.Req)
+		sess := manager.SessionStart(ctx.Resp, ctx.Req)
 
 		// Get flash.
 		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
@@ -117,8 +117,8 @@ func Sessioner(options ...SessionOptions) macaron.Handler {
 		}
 
 		f := &Flash{Values: url.Values{}}
-		ctx.RW().(macaron.ResponseWriter).Before(func(macaron.ResponseWriter) {
-			sess.SessionRelease(ctx.RW())
+		ctx.Resp.Before(func(macaron.ResponseWriter) {
+			sess.SessionRelease(ctx.Resp)
 
 			if flash := f.Encode(); len(flash) > 0 {
 				ctx.SetCookie("macaron_flash", flash, 0)

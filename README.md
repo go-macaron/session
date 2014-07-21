@@ -23,7 +23,7 @@ func main() {
 	
 	m.Get("/", func(sess session.SessionStore) string {
 		sess.Set("session", "session middleware")
-		return sess.Get("session")
+		return sess.Get("session").(string)
 	})
 	
 	m.Get("/signup", func(ctx *macaron.Context, f *session.Flash) {
