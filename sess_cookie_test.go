@@ -1,4 +1,5 @@
 // Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -22,7 +23,11 @@ import (
 )
 
 func TestCookie(t *testing.T) {
-	config := `{"cookieName":"gosessionid","enableSetCookie":false,"gclifetime":3600,"ProviderConfig":"{\"cookieName\":\"gosessionid\",\"securityKey\":\"beegocookiehashkey\"}"}`
+	config := &Config{
+		CookieName:     "gosessionid",
+		Gclifetime:     3600,
+		ProviderConfig: "{\"cookieName\":\"gosessionid\",\"securityKey\":\"macaroncookiehashkey\"}",
+	}
 	globalSessions, err := NewManager("cookie", config)
 	if err != nil {
 		t.Fatal("init cookie session err", err)

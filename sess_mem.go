@@ -92,7 +92,7 @@ func (pder *MemProvider) SessionInit(maxlifetime int64, savePath string) error {
 }
 
 // get memory session store by sid
-func (pder *MemProvider) SessionRead(sid string) (SessionStore, error) {
+func (pder *MemProvider) SessionRead(sid string) (Store, error) {
 	pder.lock.RLock()
 	if element, ok := pder.sessions[sid]; ok {
 		go pder.SessionUpdate(sid)
@@ -121,7 +121,7 @@ func (pder *MemProvider) SessionExist(sid string) bool {
 }
 
 // generate new sid for session store in memory session
-func (pder *MemProvider) SessionRegenerate(oldsid, sid string) (SessionStore, error) {
+func (pder *MemProvider) SessionRegenerate(oldsid, sid string) (Store, error) {
 	pder.lock.RLock()
 	if element, ok := pder.sessions[oldsid]; ok {
 		go pder.SessionUpdate(oldsid)

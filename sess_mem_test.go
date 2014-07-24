@@ -1,4 +1,5 @@
 // Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -22,17 +23,21 @@ import (
 )
 
 func TestMem(t *testing.T) {
-	globalSessions, _ := NewManager("memory", `{"cookieName":"gosessionid","gclifetime":10}`)
+	config := &Config{
+		CookieName: "gosessionid",
+		Gclifetime: 10,
+	}
+	globalSessions, _ := NewManager("memory", config)
 	go globalSessions.GC()
 	r, _ := http.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 	sess := globalSessions.SessionStart(w, r)
 	defer sess.SessionRelease(w)
-	err := sess.Set("username", "astaxie")
-	if err != nil {
+
+	if err := sess.Set("username", "Unknwon"); err != nil {
 		t.Fatal("set error,", err)
 	}
-	if username := sess.Get("username"); username != "astaxie" {
+	if username := sess.Get("username"); username != "Unknwon" {
 		t.Fatal("get username error")
 	}
 	if cookiestr := w.Header().Get("Set-Cookie"); cookiestr == "" {

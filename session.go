@@ -31,8 +31,8 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
-// SessionStore contains all data for one session process with specific id.
-type SessionStore interface {
+// Store contains all data for one session process with specific id.
+type Store interface {
 	Set(key, value interface{}) error     //set session value
 	Get(key interface{}) interface{}      //get session value
 	Delete(key interface{}) error         //delete session value
@@ -41,30 +41,15 @@ type SessionStore interface {
 	Flush() error                         //delete all data
 }
 
-type Flash struct {
-	url.Values
-	ErrorMsg, SuccessMsg string
-}
-
-func (f *Flash) Error(msg string) {
-	f.Set("error", msg)
-	f.ErrorMsg = msg
-}
-
-func (f *Flash) Success(msg string) {
-	f.Set("success", msg)
-	f.SuccessMsg = msg
-}
-
-type SessionOptions struct {
+type Options struct {
 	// Name of provider. Default is memory.
 	Provider string
 	// Provider configuration string.
 	Config
 }
 
-func prepareOptions(options []SessionOptions) SessionOptions {
-	var opt SessionOptions
+func prepareOptions(options []Options) Options {
+	var opt Options
 	if len(options) > 0 {
 		opt = options[0]
 	}
@@ -93,9 +78,35 @@ func prepareOptions(options []SessionOptions) SessionOptions {
 	return opt
 }
 
+// ___________.____       _____    _________ ___ ___
+// \_   _____/|    |     /  _  \  /   _____//   |   \
+//  |    __)  |    |    /  /_\  \ \_____  \/    ~    \
+//  |     \   |    |___/    |    \/        \    Y    /
+//  \___  /   |_______ \____|__  /_______  /\___|_  /
+//      \/            \/       \/        \/       \/
+
+type Flash struct {
+	url.Values
+	ErrorMsg, WarningMsg, SuccessMsg string
+}
+
+func (f *Flash) Error(msg string) {
+	f.Set("error", msg)
+	f.ErrorMsg = msg
+}
+func (f *Flash) Warning(msg string) {
+	f.Set("warning", msg)
+	f.WarningMsg = msg
+}
+
+func (f *Flash) Success(msg string) {
+	f.Set("success", msg)
+	f.SuccessMsg = msg
+}
+
 // Sessioner is a middleware that maps a session.SessionStore service into the Macaron handler chain.
-// An single variadic session.SessionOptions struct can be optionally provided to configure.
-func Sessioner(options ...SessionOptions) macaron.Handler {
+// An single variadic session.Options struct can be optionally provided to configure.
+func Sessioner(options ...Options) macaron.Handler {
 	opt := prepareOptions(options)
 	manager, err := NewManager(opt.Provider, &opt.Config)
 	if err != nil {
@@ -112,6 +123,7 @@ func Sessioner(options ...SessionOptions) macaron.Handler {
 			f := &Flash{Values: vals}
 			f.ErrorMsg = f.Get("error")
 			f.SuccessMsg = f.Get("success")
+			f.WarningMsg = f.Get("warning")
 			ctx.Data["Flash"] = f
 			ctx.SetCookie("macaron_flash", "", -1)
 		}
@@ -134,9 +146,9 @@ func Sessioner(options ...SessionOptions) macaron.Handler {
 // it can operate a SessionStore by its id.
 type Provider interface {
 	SessionInit(gclifetime int64, config string) error
-	SessionRead(sid string) (SessionStore, error)
+	SessionRead(sid string) (Store, error)
 	SessionExist(sid string) bool
-	SessionRegenerate(oldsid, sid string) (SessionStore, error)
+	SessionRegenerate(oldsid, sid string) (Store, error)
 	SessionDestroy(sid string) error
 	SessionAll() int //get all active session
 	SessionGC()
@@ -205,7 +217,7 @@ func NewManager(provideName string, config *Config) (*Manager, error) {
 
 // Start session. generate or read the session id from http request.
 // if session id exists, return SessionStore with this id.
-func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session SessionStore) {
+func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session Store) {
 	cookie, err := r.Cookie(manager.config.CookieName)
 	if err != nil || cookie.Value == "" {
 		sid := manager.sessionId(r)
@@ -264,7 +276,7 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get SessionStore by its id.
-func (manager *Manager) GetSessionStore(sid string) (sessions SessionStore, err error) {
+func (manager *Manager) GetSessionStore(sid string) (sessions Store, err error) {
 	sessions, err = manager.provider.SessionRead(sid)
 	return
 }
@@ -277,7 +289,7 @@ func (manager *Manager) GC() {
 }
 
 // Regenerate a session id for this SessionStore who's id is saving in http request.
-func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session SessionStore) {
+func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session Store) {
 	sid := manager.sessionId(r)
 	cookie, err := r.Cookie(manager.config.CookieName)
 	if err != nil && cookie.Value == "" {

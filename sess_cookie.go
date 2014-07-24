@@ -138,7 +138,7 @@ func (pder *CookieProvider) SessionInit(maxlifetime int64, config string) error 
 
 // Get SessionStore in cooke.
 // decode cooke string to map and put into SessionStore with sid.
-func (pder *CookieProvider) SessionRead(sid string) (SessionStore, error) {
+func (pder *CookieProvider) SessionRead(sid string) (Store, error) {
 	maps, _ := decodeCookie(pder.block,
 		pder.config.SecurityKey,
 		pder.config.SecurityName,
@@ -156,7 +156,7 @@ func (pder *CookieProvider) SessionExist(sid string) bool {
 }
 
 // Implement method, no used.
-func (pder *CookieProvider) SessionRegenerate(oldsid, sid string) (SessionStore, error) {
+func (pder *CookieProvider) SessionRegenerate(oldsid, sid string) (Store, error) {
 	return nil, nil
 }
 
