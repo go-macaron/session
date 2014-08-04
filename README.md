@@ -57,7 +57,7 @@ import (
 
 ```go
 // ...
-m.Use(session.Sessioner(session.SessionOptions{
+m.Use(session.Sessioner(session.Options{
 	Provider:		"memory", // Name of provider.
 	CookieName:		"macaronSession", // Key name store in cookie.
 	Interval:		3600, // GC interval for memory adapter.
@@ -72,7 +72,7 @@ m.Use(session.Sessioner(session.SessionOptions{
 
 	```go
 	// ...
-	m.Use(session.Sessioner(session.SessionOptions{
+	m.Use(session.Sessioner(session.Options{
 		Provider:		"memory", // Name of provider.
 		CookieName:		"macaronSession", // Key name store in cookie.
 		Interval:		3600, // GC interval for memory adapter.
@@ -85,7 +85,7 @@ m.Use(session.Sessioner(session.SessionOptions{
 
 	```go
 	// ...
-	m.Use(session.Sessioner(session.SessionOptions{
+	m.Use(session.Sessioner(session.Options{
 		Provider:		"file", // Name of provider.
 		CookieName:		"macaronSession", // Key name store in cookie.
 		Interval:		3600, // GC interval for memory adapter.
@@ -98,7 +98,7 @@ m.Use(session.Sessioner(session.SessionOptions{
 
 	```go
 	// ...
-	m.Use(session.Sessioner(session.SessionOptions{
+	m.Use(session.Sessioner(session.Options{
 		Provider:		"redis", // Name of provider.
 		CookieName:		"macaronSession", // Key name store in cookie.
 		Interval:		3600, // GC interval for memory adapter.
@@ -111,7 +111,7 @@ m.Use(session.Sessioner(session.SessionOptions{
 
 	```go
 	// ...
-	m.Use(session.Sessioner(session.SessionOptions{
+	m.Use(session.Sessioner(session.Options{
 		Provider:		"mysql", // Name of provider.
 		CookieName:		"macaronSession", // Key name store in cookie.
 		Interval:		3600, // GC interval for memory adapter.
@@ -124,7 +124,7 @@ m.Use(session.Sessioner(session.SessionOptions{
 
 	```go
 	// ...
-	m.Use(session.Sessioner(session.SessionOptions{
+	m.Use(session.Sessioner(session.Options{
 		Provider:		"cookie", // Name of provider.
 		CookieName:		"macaronSession", // Key name store in cookie.
 		Interval:		3600, // GC interval for memory adapter.
@@ -141,7 +141,7 @@ Writing a provider is easy. You only need to define two struct types
 (Session and Provider), which satisfy the interface definition. 
 Maybe you will find the **memory** provider is a good example.
 
-	type SessionStore interface {
+	type Store interface {
 		Set(key, value interface{}) error     //set session value
 		Get(key interface{}) interface{}      //get session value
 		Delete(key interface{}) error         //delete session value
@@ -154,7 +154,7 @@ Maybe you will find the **memory** provider is a good example.
 		SessionInit(gclifetime int64, config string) error
 		SessionRead(sid string) (SessionStore, error)
 		SessionExist(sid string) bool
-		SessionRegenerate(oldsid, sid string) (SessionStore, error)
+		SessionRegenerate(oldsid, sid string) (Store, error)
 		SessionDestroy(sid string) error
 		SessionAll() int //get all active session
 		SessionGC()
