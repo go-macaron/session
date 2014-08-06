@@ -1,4 +1,5 @@
 // Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -149,7 +150,7 @@ func (rp *RedisProvider) SessionInit(maxlifetime int64, savePath string) error {
 }
 
 // read redis session by sid
-func (rp *RedisProvider) SessionRead(sid string) (session.SessionStore, error) {
+func (rp *RedisProvider) SessionRead(sid string) (session.Store, error) {
 	c := rp.poollist.Get()
 	defer c.Close()
 
@@ -181,7 +182,7 @@ func (rp *RedisProvider) SessionExist(sid string) bool {
 }
 
 // generate new sid for redis session
-func (rp *RedisProvider) SessionRegenerate(oldsid, sid string) (session.SessionStore, error) {
+func (rp *RedisProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
 	c := rp.poollist.Get()
 	defer c.Close()
 

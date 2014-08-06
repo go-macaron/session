@@ -1,4 +1,5 @@
 // Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -121,7 +122,7 @@ func (mp *MysqlProvider) SessionInit(maxlifetime int64, savePath string) error {
 }
 
 // get mysql session by sid
-func (mp *MysqlProvider) SessionRead(sid string) (session.SessionStore, error) {
+func (mp *MysqlProvider) SessionRead(sid string) (session.Store, error) {
 	c := mp.connectInit()
 	row := c.QueryRow("select session_data from session where session_key=?", sid)
 	var sessiondata []byte
@@ -158,7 +159,7 @@ func (mp *MysqlProvider) SessionExist(sid string) bool {
 }
 
 // generate new sid for mysql session
-func (mp *MysqlProvider) SessionRegenerate(oldsid, sid string) (session.SessionStore, error) {
+func (mp *MysqlProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
 	c := mp.connectInit()
 	row := c.QueryRow("select session_data from session where session_key=?", oldsid)
 	var sessiondata []byte

@@ -1,4 +1,5 @@
 // Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -108,7 +109,7 @@ func (rp *MemProvider) SessionInit(maxlifetime int64, savePath string) error {
 }
 
 // read redis session by sid
-func (rp *MemProvider) SessionRead(sid string) (session.SessionStore, error) {
+func (rp *MemProvider) SessionRead(sid string) (session.Store, error) {
 	conn, err := rp.connectInit()
 	if err != nil {
 		return nil, err
@@ -150,7 +151,7 @@ func (rp *MemProvider) SessionExist(sid string) bool {
 }
 
 // generate new sid for redis session
-func (rp *MemProvider) SessionRegenerate(oldsid, sid string) (session.SessionStore, error) {
+func (rp *MemProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
 	conn, err := rp.connectInit()
 	if err != nil {
 		return nil, err

@@ -20,35 +20,37 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestMem(t *testing.T) {
-	config := &Config{
-		CookieName: "gosessionid",
-		Gclifetime: 10,
-	}
-	globalSessions, _ := NewManager("memory", config)
-	go globalSessions.GC()
-	r, _ := http.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	sess := globalSessions.SessionStart(w, r)
-	defer sess.SessionRelease(w)
-
-	if err := sess.Set("username", "Unknwon"); err != nil {
-		t.Fatal("set error,", err)
-	}
-	if username := sess.Get("username"); username != "Unknwon" {
-		t.Fatal("get username error")
-	}
-	if cookiestr := w.Header().Get("Set-Cookie"); cookiestr == "" {
-		t.Fatal("setcookie error")
-	} else {
-		parts := strings.Split(strings.TrimSpace(cookiestr), ";")
-		for k, v := range parts {
-			nameval := strings.Split(v, "=")
-			if k == 0 && nameval[0] != "gosessionid" {
-				t.Fatal("error")
-			}
+	Convey("Memory provider", t, func() {
+		config := &Config{
+			CookieName: "gosessionid",
+			Gclifetime: 10,
 		}
-	}
+		globalSessions, err := NewManager("memory", config)
+		So(err, ShouldBeNil)
+		go globalSessions.GC()
+
+		resp := httptest.NewRecorder()
+		req, err := http.NewRequest("GET", "/", nil)
+		So(err, ShouldBeNil)
+
+		sess := globalSessions.SessionStart(resp, req)
+		defer sess.SessionRelease(resp)
+
+		So(sess.Set("username", "Unknwon"), ShouldBeNil)
+		So(sess.Get("username"), ShouldEqual, "Unknwon")
+
+		cookiestr := resp.Header().Get("Set-Cookie")
+		So(cookiestr, ShouldNotBeEmpty)
+		parts := strings.Split(strings.TrimSpace(cookiestr), ";")
+		for _, v := range parts {
+			nameval := strings.Split(v, "=")
+			So(nameval[0], ShouldEqual, "gosessionid")
+			break
+		}
+	})
 }

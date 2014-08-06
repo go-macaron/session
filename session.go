@@ -205,8 +205,11 @@ func NewManager(provideName string, config *Config) (*Manager, error) {
 		return nil, fmt.Errorf("session: unknown provide %q (forgotten import?)", provideName)
 	}
 
-	err := provider.SessionInit(config.Maxlifetime, config.ProviderConfig)
-	if err != nil {
+	config.EnableSetCookie = true
+	if config.Maxlifetime == 0 {
+		config.Maxlifetime = config.Gclifetime
+	}
+	if err := provider.SessionInit(config.Maxlifetime, config.ProviderConfig); err != nil {
 		return nil, err
 	}
 	return &Manager{

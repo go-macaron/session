@@ -1,4 +1,5 @@
 // Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -133,7 +134,7 @@ func (cp *CouchbaseProvider) SessionInit(maxlifetime int64, savePath string) err
 }
 
 // read couchbase session by sid
-func (cp *CouchbaseProvider) SessionRead(sid string) (session.SessionStore, error) {
+func (cp *CouchbaseProvider) SessionRead(sid string) (session.Store, error) {
 	cp.b = cp.getBucket()
 
 	var doc []byte
@@ -166,7 +167,7 @@ func (cp *CouchbaseProvider) SessionExist(sid string) bool {
 	}
 }
 
-func (cp *CouchbaseProvider) SessionRegenerate(oldsid, sid string) (session.SessionStore, error) {
+func (cp *CouchbaseProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
 	cp.b = cp.getBucket()
 
 	var doc []byte
