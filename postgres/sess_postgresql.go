@@ -143,7 +143,7 @@ func (mp *PostgresqlProvider) SessionInit(maxlifetime int64, savePath string) er
 }
 
 // get postgresql session by sid
-func (mp *PostgresqlProvider) SessionRead(sid string) (session.Store, error) {
+func (mp *PostgresqlProvider) SessionRead(sid string) (session.RawStore, error) {
 	c := mp.connectInit()
 	row := c.QueryRow("select session_data from session where session_key=$1", sid)
 	var sessiondata []byte
@@ -188,7 +188,7 @@ func (mp *PostgresqlProvider) SessionExist(sid string) bool {
 }
 
 // generate new sid for postgresql session
-func (mp *PostgresqlProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
+func (mp *PostgresqlProvider) SessionRegenerate(oldsid, sid string) (session.RawStore, error) {
 	c := mp.connectInit()
 	row := c.QueryRow("select session_data from session where session_key=$1", oldsid)
 	var sessiondata []byte

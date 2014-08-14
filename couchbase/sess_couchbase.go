@@ -128,7 +128,7 @@ func (cp *CouchbaseProvider) SessionInit(maxlifetime int64, savePath string) err
 }
 
 // read couchbase session by sid
-func (cp *CouchbaseProvider) SessionRead(sid string) (session.Store, error) {
+func (cp *CouchbaseProvider) SessionRead(sid string) (session.RawStore, error) {
 	cp.b = cp.getBucket()
 
 	var doc []byte
@@ -161,7 +161,7 @@ func (cp *CouchbaseProvider) SessionExist(sid string) bool {
 	}
 }
 
-func (cp *CouchbaseProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
+func (cp *CouchbaseProvider) SessionRegenerate(oldsid, sid string) (session.RawStore, error) {
 	cp.b = cp.getBucket()
 
 	var doc []byte

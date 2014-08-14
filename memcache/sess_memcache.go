@@ -116,7 +116,7 @@ func (rp *MemProvider) connectInit() error {
 }
 
 // read redis session by sid
-func (rp *MemProvider) SessionRead(sid string) (session.Store, error) {
+func (rp *MemProvider) SessionRead(sid string) (session.RawStore, error) {
 	if client == nil {
 		if err := rp.connectInit(); err != nil {
 			return nil, err
@@ -158,7 +158,7 @@ func (rp *MemProvider) SessionExist(sid string) bool {
 }
 
 // generate new sid for redis session
-func (rp *MemProvider) SessionRegenerate(oldsid, sid string) (session.Store, error) {
+func (rp *MemProvider) SessionRegenerate(oldsid, sid string) (session.RawStore, error) {
 	if client == nil {
 		if err := rp.connectInit(); err != nil {
 			return nil, err

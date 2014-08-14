@@ -110,7 +110,7 @@ func (fp *FileProvider) SessionInit(maxlifetime int64, savePath string) error {
 // Read file session by sid.
 // if file is not exist, create it.
 // the file path is generated from sid string.
-func (fp *FileProvider) SessionRead(sid string) (Store, error) {
+func (fp *FileProvider) SessionRead(sid string) (RawStore, error) {
 	filepder.lock.Lock()
 	defer filepder.lock.Unlock()
 
@@ -194,7 +194,7 @@ func (fp *FileProvider) SessionAll() int {
 
 // Generate new sid for file session.
 // it delete old file and create new file named from new sid.
-func (fp *FileProvider) SessionRegenerate(oldsid, sid string) (Store, error) {
+func (fp *FileProvider) SessionRegenerate(oldsid, sid string) (RawStore, error) {
 	filepder.lock.Lock()
 	defer filepder.lock.Unlock()
 

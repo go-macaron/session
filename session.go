@@ -33,14 +33,19 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
-// Store contains all data for one session process with specific id.
-type Store interface {
+type RawStore interface {
 	Set(key, value interface{}) error     //set session value
 	Get(key interface{}) interface{}      //get session value
 	Delete(key interface{}) error         //delete session value
 	SessionID() string                    //back current sessionID
 	SessionRelease(w http.ResponseWriter) // release the resource & save data to provider & return the data
 	Flush() error                         //delete all data
+}
+
+// Store contains all data for one session process with specific id.
+type Store interface {
+	RawStore
+	GetActiveSession() int
 }
 
 type Options struct {
@@ -106,6 +111,11 @@ func (f *Flash) Success(msg string) {
 	f.SuccessMsg = msg
 }
 
+type store struct {
+	RawStore
+	*Manager
+}
+
 // Sessioner is a middleware that maps a session.SessionStore service into the Macaron handler chain.
 // An single variadic session.Options struct can be optionally provided to configure.
 func Sessioner(options ...Options) macaron.Handler {
@@ -140,7 +150,11 @@ func Sessioner(options ...Options) macaron.Handler {
 		})
 
 		ctx.Map(f)
-		ctx.Map(sess)
+		s := store{
+			RawStore: sess,
+			Manager:  manager,
+		}
+		ctx.MapTo(s, (*Store)(nil))
 	}
 }
 
@@ -148,9 +162,9 @@ func Sessioner(options ...Options) macaron.Handler {
 // it can operate a SessionStore by its id.
 type Provider interface {
 	SessionInit(gclifetime int64, config string) error
-	SessionRead(sid string) (Store, error)
+	SessionRead(sid string) (RawStore, error)
 	SessionExist(sid string) bool
-	SessionRegenerate(oldsid, sid string) (Store, error)
+	SessionRegenerate(oldsid, sid string) (RawStore, error)
 	SessionDestroy(sid string) error
 	SessionAll() int //get all active session
 	SessionGC()
@@ -223,7 +237,7 @@ func NewManager(provideName string, config *Config) (*Manager, error) {
 
 // Start session. generate or read the session id from http request.
 // if session id exists, return SessionStore with this id.
-func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session Store) {
+func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session RawStore) {
 	cookie, err := r.Cookie(manager.config.CookieName)
 	if err != nil || cookie.Value == "" {
 		sid := manager.sessionId(r)
@@ -265,7 +279,7 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 			r.AddCookie(cookie)
 		}
 	}
-	return
+	return session
 }
 
 // Destroy session by its id in http request cookie.
@@ -286,7 +300,7 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get SessionStore by its id.
-func (manager *Manager) GetSessionStore(sid string) (sessions Store, err error) {
+func (manager *Manager) GetSessionStore(sid string) (sessions RawStore, err error) {
 	sessions, err = manager.provider.SessionRead(sid)
 	return
 }
@@ -299,7 +313,7 @@ func (manager *Manager) GC() {
 }
 
 // Regenerate a session id for this SessionStore who's id is saving in http request.
-func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session Store) {
+func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session RawStore) {
 	sid := manager.sessionId(r)
 	cookie, err := r.Cookie(manager.config.CookieName)
 	if err != nil && cookie.Value == "" {
