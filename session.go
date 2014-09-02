@@ -1,5 +1,5 @@
 // Copyright 2013 Beego Authors
-// Copyright 2014 Unknown
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -16,7 +16,7 @@
 // Package session a middleware that provides the session manager of Macaron.
 package session
 
-// NOTE: last sync 2773fda on Aug 08, 2014.
+// NOTE: last sync a144769 on Aug 18, 2014.
 
 import (
 	"crypto/hmac"
