@@ -84,7 +84,7 @@ func (st *CookieSessionStore) SessionRelease(w http.ResponseWriter) {
 	}
 	cookie := &http.Cookie{Name: cookiepder.config.CookieName,
 		Value:    url.QueryEscape(str),
-		Path:     "/",
+		Path:     cookiepder.config.CookiePath,
 		HttpOnly: true,
 		Secure:   cookiepder.config.Secure,
 		MaxAge:   cookiepder.config.Maxage}
@@ -97,6 +97,7 @@ type cookieConfig struct {
 	BlockKey     string `json:"blockKey"`
 	SecurityName string `json:"securityName"`
 	CookieName   string `json:"cookieName"`
+	CookiePath   string `json:"cookiePath"`
 	Secure       bool   `json:"secure"`
 	Maxage       int    `json:"maxage"`
 }
