@@ -69,6 +69,9 @@ func prepareOptions(options []Options) Options {
 	if len(opt.CookieName) == 0 {
 		opt.CookieName = "macaronSession"
 	}
+	if len(opt.CookiePath) == 0 {
+		opt.CookiePath = "/"
+	}
 	if opt.Gclifetime == 0 {
 		opt.Gclifetime = 3600
 	}
@@ -137,7 +140,7 @@ func Sessioner(options ...Options) macaron.Handler {
 			f.SuccessMsg = f.Get("success")
 			f.WarningMsg = f.Get("warning")
 			ctx.Data["Flash"] = f
-			ctx.SetCookie("macaron_flash", "", -1)
+			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath)
 		}
 
 		f := &Flash{Values: url.Values{}}
@@ -145,7 +148,7 @@ func Sessioner(options ...Options) macaron.Handler {
 			sess.SessionRelease(ctx.Resp)
 
 			if flash := f.Encode(); len(flash) > 0 {
-				ctx.SetCookie("macaron_flash", flash, 0)
+				ctx.SetCookie("macaron_flash", flash, 0, opt.CookiePath)
 			}
 		})
 
@@ -187,6 +190,7 @@ func Register(name string, provide Provider) {
 
 type Config struct {
 	CookieName        string `json:"cookieName"`
+	CookiePath        string `json:"cookiePath"`
 	EnableSetCookie   bool   `json:"enableSetCookie,omitempty"`
 	Gclifetime        int64  `json:"gclifetime"`
 	Maxlifetime       int64  `json:"maxLifetime"`
@@ -244,7 +248,7 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 		session, _ = manager.provider.SessionRead(sid)
 		cookie = &http.Cookie{Name: manager.config.CookieName,
 			Value:    url.QueryEscape(sid),
-			Path:     "/",
+			Path:     manager.config.CookiePath,
 			HttpOnly: true,
 			Secure:   manager.config.Secure,
 			Domain:   manager.config.Domain,
@@ -265,7 +269,7 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 			session, _ = manager.provider.SessionRead(sid)
 			cookie = &http.Cookie{Name: manager.config.CookieName,
 				Value:    url.QueryEscape(sid),
-				Path:     "/",
+				Path:     manager.config.CookiePath,
 				HttpOnly: true,
 				Secure:   manager.config.Secure,
 				Domain:   manager.config.Domain,
@@ -291,7 +295,7 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 		manager.provider.SessionDestroy(cookie.Value)
 		expiration := time.Now()
 		cookie := http.Cookie{Name: manager.config.CookieName,
-			Path:     "/",
+			Path:     manager.config.CookiePath,
 			HttpOnly: true,
 			Expires:  expiration,
 			MaxAge:   -1}
@@ -321,7 +325,7 @@ func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Reque
 		session, _ = manager.provider.SessionRead(sid)
 		cookie = &http.Cookie{Name: manager.config.CookieName,
 			Value:    url.QueryEscape(sid),
-			Path:     "/",
+			Path:     manager.config.CookiePath,
 			HttpOnly: true,
 			Secure:   manager.config.Secure,
 			Domain:   manager.config.Domain,
