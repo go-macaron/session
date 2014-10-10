@@ -33,6 +33,10 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
+func Version() string {
+	return "0.0.1"
+}
+
 type RawStore interface {
 	Set(key, value interface{}) error     //set session value
 	Get(key interface{}) interface{}      //get session value
@@ -97,16 +101,22 @@ func prepareOptions(options []Options) Options {
 
 type Flash struct {
 	url.Values
-	ErrorMsg, WarningMsg, SuccessMsg string
+	ErrorMsg, WarningMsg, InfoMsg, SuccessMsg string
 }
 
 func (f *Flash) Error(msg string) {
 	f.Set("error", msg)
 	f.ErrorMsg = msg
 }
+
 func (f *Flash) Warning(msg string) {
 	f.Set("warning", msg)
 	f.WarningMsg = msg
+}
+
+func (f *Flash) Info(msg string) {
+	f.Set("info", msg)
+	f.InfoMsg = msg
 }
 
 func (f *Flash) Success(msg string) {
@@ -138,6 +148,7 @@ func Sessioner(options ...Options) macaron.Handler {
 			f := &Flash{Values: vals}
 			f.ErrorMsg = f.Get("error")
 			f.SuccessMsg = f.Get("success")
+			f.InfoMsg = f.Get("info")
 			f.WarningMsg = f.Get("warning")
 			ctx.Data["Flash"] = f
 			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath)
