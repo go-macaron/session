@@ -34,7 +34,7 @@ import (
 )
 
 func Version() string {
-	return "0.0.1"
+	return "0.0.2"
 }
 
 type RawStore interface {
@@ -100,28 +100,42 @@ func prepareOptions(options []Options) Options {
 //      \/            \/       \/        \/       \/
 
 type Flash struct {
+	ctx *macaron.Context
 	url.Values
 	ErrorMsg, WarningMsg, InfoMsg, SuccessMsg string
 }
 
-func (f *Flash) Error(msg string) {
-	f.Set("error", msg)
+func (f *Flash) set(name, msg string, current ...bool) {
+	isShow := false
+	if len(current) > 0 && current[0] {
+		isShow = true
+	}
+
+	if isShow {
+		f.ctx.Data["Flash"] = f
+	} else {
+		f.Set(name, msg)
+	}
+}
+
+func (f *Flash) Error(msg string, current ...bool) {
 	f.ErrorMsg = msg
+	f.set("error", msg, current...)
 }
 
-func (f *Flash) Warning(msg string) {
-	f.Set("warning", msg)
+func (f *Flash) Warning(msg string, current ...bool) {
 	f.WarningMsg = msg
+	f.set("warning", msg, current...)
 }
 
-func (f *Flash) Info(msg string) {
-	f.Set("info", msg)
+func (f *Flash) Info(msg string, current ...bool) {
 	f.InfoMsg = msg
+	f.set("info", msg, current...)
 }
 
-func (f *Flash) Success(msg string) {
-	f.Set("success", msg)
+func (f *Flash) Success(msg string, current ...bool) {
 	f.SuccessMsg = msg
+	f.set("success", msg, current...)
 }
 
 type store struct {
@@ -154,7 +168,7 @@ func Sessioner(options ...Options) macaron.Handler {
 			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath)
 		}
 
-		f := &Flash{Values: url.Values{}}
+		f := &Flash{ctx, url.Values{}, "", "", "", ""}
 		ctx.Resp.Before(func(macaron.ResponseWriter) {
 			sess.SessionRelease(ctx.Resp)
 
