@@ -107,7 +107,8 @@ type Flash struct {
 
 func (f *Flash) set(name, msg string, current ...bool) {
 	isShow := false
-	if len(current) > 0 && current[0] {
+	if (len(current) == 0 && macaron.FlashNow) ||
+		(len(current) > 0 && current[0]) {
 		isShow = true
 	}
 
