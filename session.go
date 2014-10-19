@@ -34,7 +34,7 @@ import (
 )
 
 func Version() string {
-	return "0.0.2"
+	return "0.0.3"
 }
 
 type RawStore interface {
@@ -155,7 +155,7 @@ func Sessioner(options ...Options) macaron.Handler {
 	go manager.GC()
 
 	return func(ctx *macaron.Context) {
-		sess := manager.SessionStart(ctx.Resp, ctx.Req)
+		sess := manager.SessionStart(ctx.Resp, ctx.Req.Request)
 
 		// Get flash.
 		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
