@@ -71,7 +71,7 @@ func prepareOptions(options []Options) Options {
 	}
 	opt.EnableSetCookie = true
 	if len(opt.CookieName) == 0 {
-		opt.CookieName = "macaronSession"
+		opt.CookieName = "MacaronSession"
 	}
 	if len(opt.CookiePath) == 0 {
 		opt.CookiePath = "/"
