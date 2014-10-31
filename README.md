@@ -61,7 +61,7 @@ m.Use(session.Sessioner(session.Options{
 	Provider:		"memory", // Name of provider.
 	Config: Config{
 		CookieName:		"MacaronSession", // Key name store in cookie.
-		Interval:		3600, // GC interval for memory adapter.
+		Gclifetime:		3600, // GC interval for memory adapter.
 		ProviderConfig:	"./tmp", // Provider configuration string.
 	},
 }))
@@ -78,7 +78,7 @@ m.Use(session.Sessioner(session.Options{
 		Provider:		"memory", // Name of provider.
 		Config: Config{
 			CookieName:		"MacaronSession", // Key name store in cookie.
-			Interval:		3600, // GC interval for memory adapter.
+			Gclifetime:		3600, // GC interval for memory adapter.
 			ProviderConfig:	"./tmp", // Provider configuration string.
 		},
 	}))
@@ -93,7 +93,7 @@ m.Use(session.Sessioner(session.Options{
 		Provider:		"file", // Name of provider.
 		Config: Config{
 			CookieName:		"MacaronSession", // Key name store in cookie.
-			Interval:		3600, // GC interval for memory adapter.
+			Gclifetime:		3600, // GC interval for memory adapter.
 			ProviderConfig:	"./tmp", // Provider configuration string.
 		},
 	}))
@@ -108,7 +108,7 @@ m.Use(session.Sessioner(session.Options{
 		Provider:		"redis", // Name of provider.
 		Config: Config{
 			CookieName:		"MacaronSession", // Key name store in cookie.
-			Interval:		3600, // GC interval for memory adapter.
+			Gclifetime:		3600, // GC interval for memory adapter.
 			ProviderConfig:	"127.0.0.1:6379,100,macaron", // Provider configuration string.
 		},
 	}))
@@ -123,7 +123,7 @@ m.Use(session.Sessioner(session.Options{
 		Provider:		"mysql", // Name of provider.
 		Config: Config{
 			CookieName:		"MacaronSession", // Key name store in cookie.
-			Interval:		3600, // GC interval for memory adapter.
+			Gclifetime:		3600, // GC interval for memory adapter.
 			ProviderConfig:	"username:password@protocol(address)/dbname?param=value", // Provider configuration string.
 		},
 	}))
@@ -138,7 +138,7 @@ m.Use(session.Sessioner(session.Options{
 		Provider:		"cookie", // Name of provider.
 		Config: Config{
 			CookieName:		"MacaronSession", // Key name store in cookie.
-			Interval:		3600, // GC interval for memory adapter.
+			Gclifetime:		3600, // GC interval for memory adapter.
 			ProviderConfig:	"{\"cookieName\":\"gosessionid\",\"securityKey\":\"beegocookiehashkey\"}", // Provider configuration string.
 		},
 	}))
