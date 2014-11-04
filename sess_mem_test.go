@@ -38,7 +38,10 @@ func TestMem(t *testing.T) {
 		req, err := http.NewRequest("GET", "/", nil)
 		So(err, ShouldBeNil)
 
-		sess := globalSessions.SessionStart(resp, req)
+		sess, err := globalSessions.SessionStart(resp, req)
+		if err != nil {
+			t.Fatal("start session,", err)
+		}
 		defer sess.SessionRelease(resp)
 
 		So(sess.Set("username", "Unknwon"), ShouldBeNil)

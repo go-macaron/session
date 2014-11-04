@@ -34,7 +34,10 @@ func TestCookie(t *testing.T) {
 	}
 	r, _ := http.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
-	sess := globalSessions.SessionStart(w, r)
+	sess, err := globalSessions.SessionStart(w, r)
+	if err != nil {
+		t.Fatal("start session,", err)
+	}
 	err = sess.Set("username", "astaxie")
 	if err != nil {
 		t.Fatal("set error,", err)

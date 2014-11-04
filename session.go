@@ -16,16 +16,12 @@
 // Package session a middleware that provides the session manager of Macaron.
 package session
 
-// NOTE: last sync a144769 on Aug 18, 2014.
+// NOTE: last sync fc6b9ce on Nov 4, 2014.
 
 import (
-	"crypto/hmac"
-	"crypto/md5"
 	"crypto/rand"
-	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -34,7 +30,7 @@ import (
 )
 
 func Version() string {
-	return "0.0.3"
+	return "0.0.5"
 }
 
 type RawStore interface {
@@ -82,11 +78,9 @@ func prepareOptions(options []Options) Options {
 	if opt.Maxlifetime == 0 {
 		opt.Maxlifetime = opt.Gclifetime
 	}
-	if opt.SessionIDHashFunc == "" {
-		opt.SessionIDHashFunc = "sha1"
-	}
-	if opt.SessionIDHashKey == "" {
-		opt.SessionIDHashKey = string(generateRandomKey(16))
+
+	if opt.SessionIdLength == 0 {
+		opt.SessionIdLength = 16
 	}
 
 	return opt
@@ -155,7 +149,8 @@ func Sessioner(options ...Options) macaron.Handler {
 	go manager.GC()
 
 	return func(ctx *macaron.Context) {
-		sess := manager.SessionStart(ctx.Resp, ctx.Req.Request)
+		// FIXME: should I panic for error?
+		sess, _ := manager.SessionStart(ctx.Resp, ctx.Req.Request)
 
 		// Get flash.
 		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
@@ -215,17 +210,16 @@ func Register(name string, provide Provider) {
 }
 
 type Config struct {
-	CookieName        string `json:"cookieName"`
-	CookiePath        string `json:"cookiePath"`
-	EnableSetCookie   bool   `json:"enableSetCookie,omitempty"`
-	Gclifetime        int64  `json:"gclifetime"`
-	Maxlifetime       int64  `json:"maxLifetime"`
-	Secure            bool   `json:"secure"`
-	SessionIDHashFunc string `json:"sessionIDHashFunc"`
-	SessionIDHashKey  string `json:"sessionIDHashKey"`
-	CookieLifeTime    int    `json:"cookieLifeTime"`
-	ProviderConfig    string `json:"providerConfig"`
-	Domain            string `json:"domain"`
+	CookieName      string `json:"cookieName"`
+	CookiePath      string `json:"cookiePath"`
+	EnableSetCookie bool   `json:"enableSetCookie,omitempty"`
+	Gclifetime      int64  `json:"gclifetime"`
+	Maxlifetime     int64  `json:"maxLifetime"`
+	Secure          bool   `json:"secure"`
+	CookieLifeTime  int    `json:"cookieLifeTime"`
+	ProviderConfig  string `json:"providerConfig"`
+	Domain          string `json:"domain"`
+	SessionIdLength int64  `json:"sessionIdLength"`
 }
 
 // Manager contains Provider and its configuration.
@@ -267,11 +261,18 @@ func NewManager(provideName string, config *Config) (*Manager, error) {
 
 // Start session. generate or read the session id from http request.
 // if session id exists, return SessionStore with this id.
-func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session RawStore) {
+func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session RawStore, _ error) {
 	cookie, err := r.Cookie(manager.config.CookieName)
-	if err != nil || cookie.Value == "" {
-		sid := manager.sessionId(r)
-		session, _ = manager.provider.SessionRead(sid)
+	if err != nil || len(cookie.Value) == 0 {
+		sid, err := manager.sessionId(r)
+		if err != nil {
+			return nil, err
+		}
+		session, err = manager.provider.SessionRead(sid)
+		if err != nil {
+			return nil, err
+		}
+
 		cookie = &http.Cookie{Name: manager.config.CookieName,
 			Value:    url.QueryEscape(sid),
 			Path:     manager.config.CookiePath,
@@ -287,12 +288,26 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 		}
 		r.AddCookie(cookie)
 	} else {
-		sid, _ := url.QueryUnescape(cookie.Value)
+		sid, err := url.QueryUnescape(cookie.Value)
+		if err != nil {
+			return nil, err
+		}
+
 		if manager.provider.SessionExist(sid) {
-			session, _ = manager.provider.SessionRead(sid)
+			session, err = manager.provider.SessionRead(sid)
+			if err != nil {
+				return nil, err
+			}
 		} else {
-			sid = manager.sessionId(r)
-			session, _ = manager.provider.SessionRead(sid)
+			sid, err = manager.sessionId(r)
+			if err != nil {
+				return nil, err
+			}
+			session, err = manager.provider.SessionRead(sid)
+			if err != nil {
+				return nil, err
+			}
+
 			cookie = &http.Cookie{Name: manager.config.CookieName,
 				Value:    url.QueryEscape(sid),
 				Path:     manager.config.CookiePath,
@@ -309,7 +324,7 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 			r.AddCookie(cookie)
 		}
 	}
-	return session
+	return session, nil
 }
 
 // Destroy session by its id in http request cookie.
@@ -344,11 +359,18 @@ func (manager *Manager) GC() {
 
 // Regenerate a session id for this SessionStore who's id is saving in http request.
 func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session RawStore) {
-	sid := manager.sessionId(r)
+	sid, err := manager.sessionId(r)
+	if err != nil {
+		return nil
+	}
+
 	cookie, err := r.Cookie(manager.config.CookieName)
 	if err != nil && cookie.Value == "" {
-		//delete old cookie
-		session, _ = manager.provider.SessionRead(sid)
+		// delete old cookie
+		session, err = manager.provider.SessionRead(sid)
+		if err != nil {
+			return nil
+		}
 		cookie = &http.Cookie{Name: manager.config.CookieName,
 			Value:    url.QueryEscape(sid),
 			Path:     manager.config.CookiePath,
@@ -357,8 +379,14 @@ func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Reque
 			Domain:   manager.config.Domain,
 		}
 	} else {
-		oldsid, _ := url.QueryUnescape(cookie.Value)
-		session, _ = manager.provider.SessionRegenerate(oldsid, sid)
+		oldsid, err := url.QueryUnescape(cookie.Value)
+		if err != nil {
+			return nil
+		}
+		session, err = manager.provider.SessionRegenerate(oldsid, sid)
+		if err != nil {
+			return nil
+		}
 		cookie.Value = url.QueryEscape(sid)
 		cookie.HttpOnly = true
 		cookie.Path = "/"
@@ -368,18 +396,12 @@ func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Reque
 	}
 	http.SetCookie(w, cookie)
 	r.AddCookie(cookie)
-	return
+	return session
 }
 
 // Get all active sessions count number.
 func (manager *Manager) GetActiveSession() int {
 	return manager.provider.SessionAll()
-}
-
-// Set hash function for generating session id.
-func (manager *Manager) SetHashFunc(hasfunc, hashkey string) {
-	manager.config.SessionIDHashFunc = hasfunc
-	manager.config.SessionIDHashKey = hashkey
 }
 
 // Set cookie with https.
@@ -388,24 +410,11 @@ func (manager *Manager) SetSecure(secure bool) {
 }
 
 // generate session id with rand string, unix nano time, remote addr by hash function.
-func (manager *Manager) sessionId(r *http.Request) (sid string) {
-	bs := make([]byte, 32)
-	if n, err := io.ReadFull(rand.Reader, bs); n != 32 || err != nil {
-		bs = RandomCreateBytes(32)
+func (manager *Manager) sessionId(r *http.Request) (string, error) {
+	b := make([]byte, manager.config.SessionIdLength)
+	n, err := rand.Read(b)
+	if n != len(b) || err != nil {
+		return "", fmt.Errorf("fail to read from the system CSPRNG.")
 	}
-	sig := fmt.Sprintf("%s%d%s", r.RemoteAddr, time.Now().UnixNano(), bs)
-	if manager.config.SessionIDHashFunc == "md5" {
-		h := md5.New()
-		h.Write([]byte(sig))
-		sid = hex.EncodeToString(h.Sum(nil))
-	} else if manager.config.SessionIDHashFunc == "sha1" {
-		h := hmac.New(sha1.New, []byte(manager.config.SessionIDHashKey))
-		fmt.Fprintf(h, "%s", sig)
-		sid = hex.EncodeToString(h.Sum(nil))
-	} else {
-		h := hmac.New(sha1.New, []byte(manager.config.SessionIDHashKey))
-		fmt.Fprintf(h, "%s", sig)
-		sid = hex.EncodeToString(h.Sum(nil))
-	}
-	return
+	return hex.EncodeToString(b), nil
 }
