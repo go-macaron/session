@@ -46,6 +46,7 @@ type RawStore interface {
 type Store interface {
 	RawStore
 	GetActiveSession() int
+	GetSessionStore(sid string) (sessions RawStore, err error)
 }
 
 type Options struct {
