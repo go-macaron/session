@@ -16,7 +16,7 @@
 // Package session a middleware that provides the session manager of Macaron.
 package session
 
-// NOTE: last sync fc6b9ce on Nov 4, 2014.
+// NOTE: last sync 000033e on Nov 4, 2014.
 
 import (
 	"crypto/rand"
