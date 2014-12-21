@@ -1,4 +1,4 @@
-// Copyright 2013 Beego Authors
+// Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -15,118 +15,58 @@
 package session
 
 import (
-	"crypto/aes"
-	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/Unknwon/macaron"
+	. "github.com/smartystreets/goconvey/convey"
 )
 
-func Test_gob(t *testing.T) {
-	a := make(map[interface{}]interface{})
-	a["username"] = "astaxie"
-	a[12] = 234
-	a["user"] = User{"asta", "xie"}
-	b, err := EncodeGob(a)
-	if err != nil {
-		t.Error(err)
-	}
-	c, err := DecodeGob(b)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(c) == 0 {
-		t.Error("decodeGob empty")
-	}
-	if c["username"] != "astaxie" {
-		t.Error("decode string error")
-	}
-	if c[12] != 234 {
-		t.Error("decode int error")
-	}
-	if c["user"].(User).Username != "asta" {
-		t.Error("decode struct error")
-	}
+func Test_Version(t *testing.T) {
+	Convey("Check package version", t, func() {
+		So(Version(), ShouldEqual, _VERSION)
+	})
 }
 
-type User struct {
-	Username string
-	NickName string
-}
+func Test_Sessioner(t *testing.T) {
+	Convey("Use session middleware", t, func() {
+		m := macaron.New()
+		m.Use(Sessioner())
+		m.Get("/", func() {})
 
-func TestGenerate(t *testing.T) {
-	str := generateRandomKey(20)
-	if len(str) != 20 {
-		t.Fatal("generate length is not equal to 20")
-	}
-}
+		resp := httptest.NewRecorder()
+		req, err := http.NewRequest("GET", "/", nil)
+		So(err, ShouldBeNil)
+		m.ServeHTTP(resp, req)
+	})
 
-func TestCookieEncodeDecode(t *testing.T) {
-	hashKey := "testhashKey"
-	blockkey := generateRandomKey(16)
-	block, err := aes.NewCipher(blockkey)
-	if err != nil {
-		t.Fatal("NewCipher:", err)
-	}
-	securityName := string(generateRandomKey(20))
-	val := make(map[interface{}]interface{})
-	val["name"] = "astaxie"
-	val["gender"] = "male"
-	str, err := encodeCookie(block, hashKey, securityName, val)
-	if err != nil {
-		t.Fatal("encodeCookie:", err)
-	}
-	dst := make(map[interface{}]interface{})
-	dst, err = decodeCookie(block, hashKey, securityName, str, 3600)
-	if err != nil {
-		t.Fatal("decodeCookie", err)
-	}
-	if dst["name"] != "astaxie" {
-		t.Fatal("dst get map error")
-	}
-	if dst["gender"] != "male" {
-		t.Fatal("dst get map error")
-	}
-}
+	Convey("Register invalid provider that", t, func() {
+		Convey("Provider not exists", func() {
+			defer func() {
+				So(recover(), ShouldNotBeNil)
+			}()
 
-func TestParseConfig(t *testing.T) {
-	s := `{"cookieName":"gosessionid","gclifetime":3600}`
-	cf := new(Config)
-	cf.EnableSetCookie = true
-	err := json.Unmarshal([]byte(s), cf)
-	if err != nil {
-		t.Fatal("parse json error,", err)
-	}
-	if cf.CookieName != "gosessionid" {
-		t.Fatal("parseconfig get cookiename error")
-	}
-	if cf.Gclifetime != 3600 {
-		t.Fatal("parseconfig get gclifetime error")
-	}
+			m := macaron.New()
+			m.Use(Sessioner(Options{
+				Provider: "fake",
+			}))
+		})
 
-	cc := `{"cookieName":"gosessionid","enableSetCookie":false,"gclifetime":3600,"ProviderConfig":"{\"cookieName\":\"gosessionid\",\"securityKey\":\"beegocookiehashkey\"}"}`
-	cf2 := new(Config)
-	cf2.EnableSetCookie = true
-	err = json.Unmarshal([]byte(cc), cf2)
-	if err != nil {
-		t.Fatal("parse json error,", err)
-	}
-	if cf2.CookieName != "gosessionid" {
-		t.Fatal("parseconfig get cookiename error")
-	}
-	if cf2.Gclifetime != 3600 {
-		t.Fatal("parseconfig get gclifetime error")
-	}
-	if cf2.EnableSetCookie != false {
-		t.Fatal("parseconfig get enableSetCookie error")
-	}
-	cconfig := new(cookieConfig)
-	err = json.Unmarshal([]byte(cf2.ProviderConfig), cconfig)
-	if err != nil {
-		t.Fatal("parse ProviderConfig err,", err)
-	}
-	if cconfig.CookieName != "gosessionid" {
-		t.Fatal("ProviderConfig get cookieName error")
-	}
-	if cconfig.SecurityKey != "beegocookiehashkey" {
-		t.Fatal("ProviderConfig get securityKey error")
-	}
+		Convey("Provider value is nil", func() {
+			defer func() {
+				So(recover(), ShouldNotBeNil)
+			}()
+
+			Register("fake", nil)
+		})
+
+		Convey("Register twice", func() {
+			defer func() {
+				So(recover(), ShouldNotBeNil)
+			}()
+
+			Register("memory", &MemProvider{})
+		})
+	})
 }

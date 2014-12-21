@@ -1,4 +1,3 @@
-// Copyright 2013 Beego Authors
 // Copyright 2014 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
@@ -18,42 +17,81 @@ package session
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+	"time"
 
+	"github.com/Unknwon/macaron"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestMem(t *testing.T) {
-	Convey("Memory provider", t, func() {
-		config := &Config{
-			CookieName: "gosessionid",
-			Gclifetime: 10,
-		}
-		globalSessions, err := NewManager("memory", config)
-		So(err, ShouldBeNil)
-		go globalSessions.GC()
+func Test_MemProvider(t *testing.T) {
+	Convey("Test memory session provider", t, func() {
 
-		resp := httptest.NewRecorder()
-		req, err := http.NewRequest("GET", "/", nil)
-		So(err, ShouldBeNil)
+		Convey("Basic operation", func() {
+			m := macaron.New()
+			m.Use(Sessioner())
 
-		sess, err := globalSessions.SessionStart(resp, req)
-		if err != nil {
-			t.Fatal("start session,", err)
-		}
-		defer sess.SessionRelease(resp)
+			m.Get("/", func(sess Store) {
+				sess.Set("uname", "unknwon")
+			})
+			m.Get("/get", func(sess Store) {
+				sid := sess.SessionID()
+				So(sid, ShouldNotBeEmpty)
+				uname := sess.Get("uname")
+				So(uname, ShouldNotBeNil)
+				So(uname, ShouldEqual, "unknwon")
 
-		So(sess.Set("username", "Unknwon"), ShouldBeNil)
-		So(sess.Get("username"), ShouldEqual, "Unknwon")
+				So(sess.GetActiveSession(), ShouldEqual, 1)
 
-		cookiestr := resp.Header().Get("Set-Cookie")
-		So(cookiestr, ShouldNotBeEmpty)
-		parts := strings.Split(strings.TrimSpace(cookiestr), ";")
-		for _, v := range parts {
-			nameval := strings.Split(v, "=")
-			So(nameval[0], ShouldEqual, "gosessionid")
-			break
-		}
+				So(sess.Delete("uname"), ShouldBeNil)
+				So(sess.Get("uname"), ShouldBeNil)
+
+				So(sess.Destory(sid), ShouldBeNil)
+				So(sess.GetActiveSession(), ShouldEqual, 0)
+			})
+
+			resp := httptest.NewRecorder()
+			req, err := http.NewRequest("GET", "/", nil)
+			So(err, ShouldBeNil)
+			m.ServeHTTP(resp, req)
+
+			cookie := resp.Header().Get("Set-Cookie")
+
+			resp = httptest.NewRecorder()
+			req, err = http.NewRequest("GET", "/get", nil)
+			So(err, ShouldBeNil)
+
+			req.Header.Set("Cookie", cookie)
+			m.ServeHTTP(resp, req)
+		})
+
+		Convey("GC session", func() {
+			m := macaron.New()
+			m.Use(Sessioner(Options{
+				Config: Config{
+					Gclifetime: 1,
+				},
+			}))
+
+			m.Get("/", func(sess Store) {
+				sess.Set("uname", "unknwon")
+				So(sess.SessionID(), ShouldNotBeEmpty)
+				uname := sess.Get("uname")
+				So(uname, ShouldNotBeNil)
+				So(uname, ShouldEqual, "unknwon")
+
+				So(sess.Flush(), ShouldBeNil)
+				So(sess.Get("uname"), ShouldBeNil)
+
+				time.Sleep(2 * time.Second)
+				sess.GC()
+				So(sess.GetActiveSession(), ShouldEqual, 0)
+			})
+
+			resp := httptest.NewRecorder()
+			req, err := http.NewRequest("GET", "/", nil)
+			So(err, ShouldBeNil)
+			m.ServeHTTP(resp, req)
+		})
 	})
 }

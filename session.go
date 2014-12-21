@@ -22,6 +22,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -29,30 +30,65 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
+const _VERSION = "0.0.6"
+
 func Version() string {
-	return "0.0.5"
+	return _VERSION
 }
 
+// RawStore is the interface that operates the session data.
 type RawStore interface {
-	Set(key, value interface{}) error     //set session value
-	Get(key interface{}) interface{}      //get session value
-	Delete(key interface{}) error         //delete session value
-	SessionID() string                    //back current sessionID
-	SessionRelease(w http.ResponseWriter) // release the resource & save data to provider & return the data
-	Flush() error                         //delete all data
+	// Set sets value to given key in session.
+	Set(key, value interface{}) error
+	// Get gets value by given key in session.
+	Get(key interface{}) interface{}
+	// Delete delete a key from session.
+	Delete(key interface{}) error
+	// SessionID returns current session ID.
+	SessionID() string
+	// SessionRelease releases resource and save data to provider.
+	SessionRelease(w http.ResponseWriter)
+	// Flush deletes all session data.
+	Flush() error
 }
 
-// Store contains all data for one session process with specific id.
+// Store is the interface that contains all data for one session process with specific ID.
 type Store interface {
 	RawStore
+	// GetSessionStore returns raw session store by session ID.
+	GetSessionStore(string) (RawStore, error)
+	// Destory deletes a session by session ID.
+	Destory(string) error
+	// GetActiveSession returns number of active sessions.
 	GetActiveSession() int
-	GetSessionStore(sid string) (sessions RawStore, err error)
+	// GC calls GC to clean expired sessions.
+	GC()
 }
 
+type store struct {
+	RawStore
+	*Manager
+}
+
+// Config represents session provider configuration.
+type Config struct {
+	CookieName      string `json:"cookieName"`
+	CookiePath      string `json:"cookiePath"`
+	EnableSetCookie bool   `json:"enableSetCookie,omitempty"`
+	Gclifetime      int64  `json:"gclifetime"`
+	Maxlifetime     int64  `json:"maxLifetime"`
+	Secure          bool   `json:"secure"`
+	CookieLifeTime  int    `json:"cookieLifeTime"`
+	ProviderConfig  string `json:"providerConfig"`
+	Domain          string `json:"domain"`
+	SessionIDLength int64  `json:"sessionIdLength"`
+}
+
+// Options represents a struct for specifying configuration options for the session middleware.
 type Options struct {
 	// Name of provider. Default is memory.
 	Provider string
-	// Provider configuration string.
+	// Provider configuration.
 	Config
 }
 
@@ -62,7 +98,7 @@ func prepareOptions(options []Options) Options {
 		opt = options[0]
 	}
 
-	// Defaults
+	// Defaults.
 	if len(opt.Provider) == 0 {
 		opt.Provider = "memory"
 	}
@@ -79,12 +115,246 @@ func prepareOptions(options []Options) Options {
 	if opt.Maxlifetime == 0 {
 		opt.Maxlifetime = opt.Gclifetime
 	}
-
-	if opt.SessionIdLength == 0 {
-		opt.SessionIdLength = 16
+	if opt.SessionIDLength == 0 {
+		opt.SessionIDLength = 16
 	}
 
 	return opt
+}
+
+// Sessioner is a middleware that maps a session.SessionStore service into the Macaron handler chain.
+// An single variadic session.Options struct can be optionally provided to configure.
+func Sessioner(options ...Options) macaron.Handler {
+	opt := prepareOptions(options)
+	manager, err := NewManager(opt.Provider, &opt.Config)
+	if err != nil {
+		panic(err)
+	}
+	go manager.GC()
+
+	return func(ctx *macaron.Context) {
+		// FIXME: should I panic for error?
+		sess, _ := manager.SessionStart(ctx)
+
+		// Get flash.
+		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
+		if len(vals) > 0 {
+			f := &Flash{Values: vals}
+			f.ErrorMsg = f.Get("error")
+			f.SuccessMsg = f.Get("success")
+			f.InfoMsg = f.Get("info")
+			f.WarningMsg = f.Get("warning")
+			ctx.Data["Flash"] = f
+			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath)
+		}
+
+		f := &Flash{ctx, url.Values{}, "", "", "", ""}
+		ctx.Resp.Before(func(macaron.ResponseWriter) {
+			if flash := f.Encode(); len(flash) > 0 {
+				ctx.SetCookie("macaron_flash", flash, 0, opt.CookiePath)
+			}
+		})
+
+		ctx.Map(f)
+		s := store{
+			RawStore: sess,
+			Manager:  manager,
+		}
+		ctx.MapTo(s, (*Store)(nil))
+
+		ctx.Next()
+
+		sess.SessionRelease(ctx.Resp)
+	}
+}
+
+// Provider is the interface that provides session manipulations.
+type Provider interface {
+	// SessionInit initializes session provider.
+	SessionInit(gclifetime int64, config string) error
+	// SessionRead returns raw session store by session ID.
+	SessionRead(sid string) (RawStore, error)
+	// SessionExist returns true if session with given ID exists.
+	SessionExist(sid string) bool
+	// SessionRegenerate regenerates a session store from old session ID to new one.
+	SessionRegenerate(oldsid, sid string) (RawStore, error)
+	// SessionDestroy deletes a session by session ID.
+	SessionDestroy(sid string) error
+	// SessionAll returns number of active sessions.
+	SessionAll() int
+	// SessionGC calls GC to clean expired sessions.
+	SessionGC()
+}
+
+var providers = make(map[string]Provider)
+
+// Register registers a provider.
+func Register(name string, provider Provider) {
+	if provider == nil {
+		panic("session: cannot register provider with nil value")
+	}
+	if _, dup := providers[name]; dup {
+		panic(fmt.Errorf("session: cannot register provider '%s' twice", name))
+	}
+	providers[name] = provider
+}
+
+//    _____
+//   /     \ _____    ____ _____     ____   ___________
+//  /  \ /  \\__  \  /    \\__  \   / ___\_/ __ \_  __ \
+// /    Y    \/ __ \|   |  \/ __ \_/ /_/  >  ___/|  | \/
+// \____|__  (____  /___|  (____  /\___  / \___  >__|
+//         \/     \/     \/     \//_____/      \/
+
+// Manager represents a struct that contains session provider and its configuration.
+type Manager struct {
+	provider Provider
+	config   *Config
+}
+
+// NewManager creates and returns a new session manager by given provider name and configuration.
+// It panics when given provider isn't registered.
+func NewManager(name string, cfg *Config) (*Manager, error) {
+	p, ok := providers[name]
+	if !ok {
+		return nil, fmt.Errorf("session: unknown provider ‘%q’(forgotten import?)", name)
+	}
+	if err := p.SessionInit(cfg.Maxlifetime, cfg.ProviderConfig); err != nil {
+		return nil, err
+	}
+	return &Manager{p, cfg}, nil
+}
+
+// sessionId generates a new session ID with rand string, unix nano time, remote addr by hash function.
+func (m *Manager) sessionId() (string, error) {
+	k := make([]byte, m.config.SessionIDLength)
+	if _, err := io.ReadFull(rand.Reader, k); err != nil {
+		return "", fmt.Errorf("error generating random string: %v", err)
+	}
+	return hex.EncodeToString(k), nil
+}
+
+// SessionStart starts a session by generating new one
+// or retrieve existence one by reading session ID from HTTP request if it's valid.
+func (m *Manager) SessionStart(ctx *macaron.Context) (RawStore, error) {
+	sid := ctx.GetCookie(m.config.CookieName)
+	if len(sid) > 0 && m.provider.SessionExist(sid) {
+		return m.provider.SessionRead(sid)
+	}
+
+	sid, err := m.sessionId()
+	if err != nil {
+		return nil, err
+	}
+	sess, err := m.provider.SessionRead(sid)
+	if err != nil {
+		return nil, err
+	}
+
+	cookie := &http.Cookie{
+		Name:     m.config.CookieName,
+		Value:    url.QueryEscape(sid),
+		Path:     m.config.CookiePath,
+		HttpOnly: true,
+		Secure:   m.config.Secure,
+		Domain:   m.config.Domain,
+	}
+	if m.config.CookieLifeTime >= 0 {
+		cookie.MaxAge = m.config.CookieLifeTime
+	}
+	if m.config.EnableSetCookie {
+		http.SetCookie(ctx.Resp, cookie)
+	}
+	ctx.Req.AddCookie(cookie)
+	return sess, nil
+}
+
+// GC starts GC job in a certain period.
+func (m *Manager) GC() {
+	m.provider.SessionGC()
+	time.AfterFunc(time.Duration(m.config.Gclifetime)*time.Second, func() { m.GC() })
+}
+
+// SessionDestroy deletes a session by given ID.
+func (m *Manager) SessionDestroy(ctx *macaron.Context) error {
+	sid := ctx.GetCookie(m.config.CookieName)
+	if len(sid) == 0 {
+		return nil
+	}
+
+	if err := m.provider.SessionDestroy(sid); err != nil {
+		return err
+	}
+	cookie := &http.Cookie{
+		Name:     m.config.CookieName,
+		Path:     m.config.CookiePath,
+		HttpOnly: true,
+		Expires:  time.Now(),
+		MaxAge:   -1,
+	}
+	http.SetCookie(ctx.Resp, cookie)
+	return nil
+}
+
+// GetSessionStore returns raw session store by session ID.
+func (m *Manager) GetSessionStore(sid string) (RawStore, error) {
+	return m.provider.SessionRead(sid)
+}
+
+// Destory deletes a session by session ID.
+func (m *Manager) Destory(sid string) error {
+	return m.provider.SessionDestroy(sid)
+}
+
+// GetActiveSession returns number of active sessions.
+func (m *Manager) GetActiveSession() int {
+	return m.provider.SessionAll()
+}
+
+// SessionRegenerate regenerates a session store from old session ID to new one.
+func (m *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session RawStore) {
+	sid, err := m.sessionId()
+	if err != nil {
+		return nil
+	}
+
+	cookie, err := r.Cookie(m.config.CookieName)
+	if err != nil && cookie.Value == "" {
+		session, err = m.provider.SessionRead(sid)
+		if err != nil {
+			return nil
+		}
+		cookie = &http.Cookie{Name: m.config.CookieName,
+			Value:    url.QueryEscape(sid),
+			Path:     m.config.CookiePath,
+			HttpOnly: true,
+			Secure:   m.config.Secure,
+			Domain:   m.config.Domain,
+		}
+	} else {
+		oldsid, err := url.QueryUnescape(cookie.Value)
+		if err != nil {
+			return nil
+		}
+		session, err = m.provider.SessionRegenerate(oldsid, sid)
+		if err != nil {
+			return nil
+		}
+		cookie.Value = url.QueryEscape(sid)
+		cookie.HttpOnly = true
+		cookie.Path = "/"
+	}
+	if m.config.CookieLifeTime >= 0 {
+		cookie.MaxAge = m.config.CookieLifeTime
+	}
+	http.SetCookie(w, cookie)
+	r.AddCookie(cookie)
+	return session
+}
+
+// SetSecure indicates whether to set cookie with HTTPS or not.
+func (m *Manager) SetSecure(secure bool) {
+	m.config.Secure = secure
 }
 
 // ___________.____       _____    _________ ___ ___
@@ -132,290 +402,4 @@ func (f *Flash) Info(msg string, current ...bool) {
 func (f *Flash) Success(msg string, current ...bool) {
 	f.SuccessMsg = msg
 	f.set("success", msg, current...)
-}
-
-type store struct {
-	RawStore
-	*Manager
-}
-
-// Sessioner is a middleware that maps a session.SessionStore service into the Macaron handler chain.
-// An single variadic session.Options struct can be optionally provided to configure.
-func Sessioner(options ...Options) macaron.Handler {
-	opt := prepareOptions(options)
-	manager, err := NewManager(opt.Provider, &opt.Config)
-	if err != nil {
-		panic(err)
-	}
-	go manager.GC()
-
-	return func(ctx *macaron.Context) {
-		// FIXME: should I panic for error?
-		sess, _ := manager.SessionStart(ctx.Resp, ctx.Req.Request)
-
-		// Get flash.
-		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
-		if len(vals) > 0 {
-			f := &Flash{Values: vals}
-			f.ErrorMsg = f.Get("error")
-			f.SuccessMsg = f.Get("success")
-			f.InfoMsg = f.Get("info")
-			f.WarningMsg = f.Get("warning")
-			ctx.Data["Flash"] = f
-			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath)
-		}
-
-		f := &Flash{ctx, url.Values{}, "", "", "", ""}
-		ctx.Resp.Before(func(macaron.ResponseWriter) {
-			sess.SessionRelease(ctx.Resp)
-
-			if flash := f.Encode(); len(flash) > 0 {
-				ctx.SetCookie("macaron_flash", flash, 0, opt.CookiePath)
-			}
-		})
-
-		ctx.Map(f)
-		s := store{
-			RawStore: sess,
-			Manager:  manager,
-		}
-		ctx.MapTo(s, (*Store)(nil))
-	}
-}
-
-// Provider contains global session methods and saved SessionStores.
-// it can operate a SessionStore by its id.
-type Provider interface {
-	SessionInit(gclifetime int64, config string) error
-	SessionRead(sid string) (RawStore, error)
-	SessionExist(sid string) bool
-	SessionRegenerate(oldsid, sid string) (RawStore, error)
-	SessionDestroy(sid string) error
-	SessionAll() int //get all active session
-	SessionGC()
-}
-
-var provides = make(map[string]Provider)
-
-// Register makes a session provide available by the provided name.
-// If Register is called twice with the same name or if driver is nil,
-// it panics.
-func Register(name string, provide Provider) {
-	if provide == nil {
-		panic("session: Register provide is nil")
-	}
-	if _, dup := provides[name]; dup {
-		panic("session: Register called twice for provider " + name)
-	}
-	provides[name] = provide
-}
-
-type Config struct {
-	CookieName      string `json:"cookieName"`
-	CookiePath      string `json:"cookiePath"`
-	EnableSetCookie bool   `json:"enableSetCookie,omitempty"`
-	Gclifetime      int64  `json:"gclifetime"`
-	Maxlifetime     int64  `json:"maxLifetime"`
-	Secure          bool   `json:"secure"`
-	CookieLifeTime  int    `json:"cookieLifeTime"`
-	ProviderConfig  string `json:"providerConfig"`
-	Domain          string `json:"domain"`
-	SessionIdLength int64  `json:"sessionIdLength"`
-}
-
-// Manager contains Provider and its configuration.
-type Manager struct {
-	provider Provider
-	config   *Config
-}
-
-// Create new Manager with provider name and json config string.
-// provider name:
-// 1. cookie
-// 2. file
-// 3. memory
-// 4. redis
-// 5. mysql
-// json config:
-// 1. is https  default false
-// 2. hashfunc  default sha1
-// 3. hashkey default beegosessionkey
-// 4. maxage default is none
-func NewManager(provideName string, config *Config) (*Manager, error) {
-	provider, ok := provides[provideName]
-	if !ok {
-		return nil, fmt.Errorf("session: unknown provide %q (forgotten import?)", provideName)
-	}
-
-	config.EnableSetCookie = true
-	if config.Maxlifetime == 0 {
-		config.Maxlifetime = config.Gclifetime
-	}
-	if err := provider.SessionInit(config.Maxlifetime, config.ProviderConfig); err != nil {
-		return nil, err
-	}
-	return &Manager{
-		provider: provider,
-		config:   config,
-	}, nil
-}
-
-// Start session. generate or read the session id from http request.
-// if session id exists, return SessionStore with this id.
-func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session RawStore, _ error) {
-	cookie, err := r.Cookie(manager.config.CookieName)
-	if err != nil || len(cookie.Value) == 0 {
-		sid, err := manager.sessionId(r)
-		if err != nil {
-			return nil, err
-		}
-		session, err = manager.provider.SessionRead(sid)
-		if err != nil {
-			return nil, err
-		}
-
-		cookie = &http.Cookie{Name: manager.config.CookieName,
-			Value:    url.QueryEscape(sid),
-			Path:     manager.config.CookiePath,
-			HttpOnly: true,
-			Secure:   manager.config.Secure,
-			Domain:   manager.config.Domain,
-		}
-		if manager.config.CookieLifeTime >= 0 {
-			cookie.MaxAge = manager.config.CookieLifeTime
-		}
-		if manager.config.EnableSetCookie {
-			http.SetCookie(w, cookie)
-		}
-		r.AddCookie(cookie)
-	} else {
-		sid, err := url.QueryUnescape(cookie.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		if manager.provider.SessionExist(sid) {
-			session, err = manager.provider.SessionRead(sid)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			sid, err = manager.sessionId(r)
-			if err != nil {
-				return nil, err
-			}
-			session, err = manager.provider.SessionRead(sid)
-			if err != nil {
-				return nil, err
-			}
-
-			cookie = &http.Cookie{Name: manager.config.CookieName,
-				Value:    url.QueryEscape(sid),
-				Path:     manager.config.CookiePath,
-				HttpOnly: true,
-				Secure:   manager.config.Secure,
-				Domain:   manager.config.Domain,
-			}
-			if manager.config.CookieLifeTime >= 0 {
-				cookie.MaxAge = manager.config.CookieLifeTime
-			}
-			if manager.config.EnableSetCookie {
-				http.SetCookie(w, cookie)
-			}
-			r.AddCookie(cookie)
-		}
-	}
-	return session, nil
-}
-
-// Destroy session by its id in http request cookie.
-func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(manager.config.CookieName)
-	if err != nil || cookie.Value == "" {
-		return
-	} else {
-		manager.provider.SessionDestroy(cookie.Value)
-		expiration := time.Now()
-		cookie := http.Cookie{Name: manager.config.CookieName,
-			Path:     manager.config.CookiePath,
-			HttpOnly: true,
-			Expires:  expiration,
-			MaxAge:   -1}
-		http.SetCookie(w, &cookie)
-	}
-}
-
-// Get SessionStore by its id.
-func (manager *Manager) GetSessionStore(sid string) (sessions RawStore, err error) {
-	sessions, err = manager.provider.SessionRead(sid)
-	return
-}
-
-// Start session gc process.
-// it can do gc in times after gc lifetime.
-func (manager *Manager) GC() {
-	manager.provider.SessionGC()
-	time.AfterFunc(time.Duration(manager.config.Gclifetime)*time.Second, func() { manager.GC() })
-}
-
-// Regenerate a session id for this SessionStore who's id is saving in http request.
-func (manager *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session RawStore) {
-	sid, err := manager.sessionId(r)
-	if err != nil {
-		return nil
-	}
-
-	cookie, err := r.Cookie(manager.config.CookieName)
-	if err != nil && cookie.Value == "" {
-		// delete old cookie
-		session, err = manager.provider.SessionRead(sid)
-		if err != nil {
-			return nil
-		}
-		cookie = &http.Cookie{Name: manager.config.CookieName,
-			Value:    url.QueryEscape(sid),
-			Path:     manager.config.CookiePath,
-			HttpOnly: true,
-			Secure:   manager.config.Secure,
-			Domain:   manager.config.Domain,
-		}
-	} else {
-		oldsid, err := url.QueryUnescape(cookie.Value)
-		if err != nil {
-			return nil
-		}
-		session, err = manager.provider.SessionRegenerate(oldsid, sid)
-		if err != nil {
-			return nil
-		}
-		cookie.Value = url.QueryEscape(sid)
-		cookie.HttpOnly = true
-		cookie.Path = "/"
-	}
-	if manager.config.CookieLifeTime >= 0 {
-		cookie.MaxAge = manager.config.CookieLifeTime
-	}
-	http.SetCookie(w, cookie)
-	r.AddCookie(cookie)
-	return session
-}
-
-// Get all active sessions count number.
-func (manager *Manager) GetActiveSession() int {
-	return manager.provider.SessionAll()
-}
-
-// Set cookie with https.
-func (manager *Manager) SetSecure(secure bool) {
-	manager.config.Secure = secure
-}
-
-// generate session id with rand string, unix nano time, remote addr by hash function.
-func (manager *Manager) sessionId(r *http.Request) (string, error) {
-	b := make([]byte, manager.config.SessionIdLength)
-	n, err := rand.Read(b)
-	if n != len(b) || err != nil {
-		return "", fmt.Errorf("fail to read from the system CSPRNG.")
-	}
-	return hex.EncodeToString(b), nil
 }
