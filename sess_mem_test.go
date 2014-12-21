@@ -34,20 +34,20 @@ func Test_MemProvider(t *testing.T) {
 			m.Get("/", func(sess Store) {
 				sess.Set("uname", "unknwon")
 			})
-			m.Get("/get", func(sess Store) {
-				sid := sess.SessionID()
+			m.Get("/get", func(ctx *macaron.Context, sess Store) {
+				sid := sess.ID()
 				So(sid, ShouldNotBeEmpty)
 				uname := sess.Get("uname")
 				So(uname, ShouldNotBeNil)
 				So(uname, ShouldEqual, "unknwon")
 
-				So(sess.GetActiveSession(), ShouldEqual, 1)
+				So(sess.Count(), ShouldEqual, 1)
 
 				So(sess.Delete("uname"), ShouldBeNil)
 				So(sess.Get("uname"), ShouldBeNil)
 
-				So(sess.Destory(sid), ShouldBeNil)
-				So(sess.GetActiveSession(), ShouldEqual, 0)
+				So(sess.Destory(ctx), ShouldBeNil)
+				So(sess.Count(), ShouldEqual, 0)
 			})
 
 			resp := httptest.NewRecorder()
@@ -75,7 +75,7 @@ func Test_MemProvider(t *testing.T) {
 
 			m.Get("/", func(sess Store) {
 				sess.Set("uname", "unknwon")
-				So(sess.SessionID(), ShouldNotBeEmpty)
+				So(sess.ID(), ShouldNotBeEmpty)
 				uname := sess.Get("uname")
 				So(uname, ShouldNotBeNil)
 				So(uname, ShouldEqual, "unknwon")
@@ -85,7 +85,7 @@ func Test_MemProvider(t *testing.T) {
 
 				time.Sleep(2 * time.Second)
 				sess.GC()
-				So(sess.GetActiveSession(), ShouldEqual, 0)
+				So(sess.Count(), ShouldEqual, 0)
 			})
 
 			resp := httptest.NewRecorder()

@@ -17,7 +17,7 @@ package session
 
 import (
 	"container/list"
-	"net/http"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -65,14 +65,14 @@ func (s *MemSessionStore) Delete(key interface{}) error {
 	return nil
 }
 
-// SessionID returns current session ID.
-func (s *MemSessionStore) SessionID() string {
+// ID returns current session ID.
+func (s *MemSessionStore) ID() string {
 	return s.sid
 }
 
-// SessionRelease releases resource and save data to provider.
-func (_ *MemSessionStore) SessionRelease(_ http.ResponseWriter) {
-	// Nothing to do with memory.
+// Release releases resource and save data to provider.
+func (_ *MemSessionStore) Release() error {
+	return nil
 }
 
 // Flush deletes all session data.
@@ -93,14 +93,14 @@ type MemProvider struct {
 	list *list.List
 }
 
-// SessionInit initializes memory session provider.
-func (p *MemProvider) SessionInit(maxLifetime int64, _ string) error {
+// Init initializes memory session provider.
+func (p *MemProvider) Init(maxLifetime int64, _ string) error {
 	p.maxLifetime = maxLifetime
 	return nil
 }
 
-// SessionUpdate expands time of session store by given ID.
-func (p *MemProvider) SessionUpdate(sid string) error {
+// update expands time of session store by given ID.
+func (p *MemProvider) update(sid string) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -112,14 +112,14 @@ func (p *MemProvider) SessionUpdate(sid string) error {
 	return nil
 }
 
-// SessionRead returns raw session store by session ID.
-func (p *MemProvider) SessionRead(sid string) (_ RawStore, err error) {
+// Read returns raw session store by session ID.
+func (p *MemProvider) Read(sid string) (_ RawStore, err error) {
 	p.lock.RLock()
 	e, ok := p.data[sid]
 	p.lock.RUnlock()
 
 	if ok {
-		if err = p.SessionUpdate(sid); err != nil {
+		if err = p.update(sid); err != nil {
 			return nil, err
 		}
 		return e.Value.(*MemSessionStore), nil
@@ -129,14 +129,13 @@ func (p *MemProvider) SessionRead(sid string) (_ RawStore, err error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	sess := NewMemSessionStore(sid)
-	e = p.list.PushBack(sess)
-	p.data[sid] = e
-	return sess, nil
+	s := NewMemSessionStore(sid)
+	p.data[sid] = p.list.PushBack(s)
+	return s, nil
 }
 
-// SessionExist returns true if session with given ID exists.
-func (p *MemProvider) SessionExist(sid string) bool {
+// Exist returns true if session with given ID exists.
+func (p *MemProvider) Exist(sid string) bool {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -144,31 +143,8 @@ func (p *MemProvider) SessionExist(sid string) bool {
 	return ok
 }
 
-// SessionRegenerate regenerates a session store from old session ID to new one.
-func (pder *MemProvider) SessionRegenerate(oldsid, sid string) (RawStore, error) {
-	pder.lock.RLock()
-	if element, ok := pder.data[oldsid]; ok {
-		go pder.SessionUpdate(oldsid)
-		pder.lock.RUnlock()
-		pder.lock.Lock()
-		element.Value.(*MemSessionStore).sid = sid
-		pder.data[sid] = element
-		delete(pder.data, oldsid)
-		pder.lock.Unlock()
-		return element.Value.(*MemSessionStore), nil
-	} else {
-		pder.lock.RUnlock()
-		pder.lock.Lock()
-		newsess := &MemSessionStore{sid: sid, lastAccess: time.Now(), data: make(map[interface{}]interface{})}
-		element := pder.list.PushBack(newsess)
-		pder.data[sid] = element
-		pder.lock.Unlock()
-		return newsess, nil
-	}
-}
-
-// SessionDestroy deletes a session by session ID.
-func (p *MemProvider) SessionDestroy(sid string) error {
+// Destory deletes a session by session ID.
+func (p *MemProvider) Destory(sid string) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -182,13 +158,33 @@ func (p *MemProvider) SessionDestroy(sid string) error {
 	return nil
 }
 
-// SessionAll returns number of active sessions.
-func (p *MemProvider) SessionAll() int {
+// Regenerate regenerates a session store from old session ID to new one.
+func (p *MemProvider) Regenerate(oldsid, sid string) (RawStore, error) {
+	if p.Exist(sid) {
+		return nil, fmt.Errorf("new sid '%s' already exists", sid)
+	}
+
+	s, err := p.Read(oldsid)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = p.Destory(oldsid); err != nil {
+		return nil, err
+	}
+
+	s.(*MemSessionStore).sid = sid
+	p.data[sid] = p.list.PushBack(s)
+	return s, nil
+}
+
+// Count counts and returns number of sessions.
+func (p *MemProvider) Count() int {
 	return p.list.Len()
 }
 
-// SessionGC calls GC to clean expired sessions.
-func (p *MemProvider) SessionGC() {
+// GC calls GC to clean expired sessions.
+func (p *MemProvider) GC() {
 	p.lock.RLock()
 	for {
 		// No session in the list.

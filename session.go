@@ -19,10 +19,8 @@ package session
 // NOTE: last sync 000033e on Nov 4, 2014.
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -30,7 +28,7 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
-const _VERSION = "0.0.6"
+const _VERSION = "0.1.0"
 
 func Version() string {
 	return _VERSION
@@ -44,10 +42,10 @@ type RawStore interface {
 	Get(key interface{}) interface{}
 	// Delete delete a key from session.
 	Delete(key interface{}) error
-	// SessionID returns current session ID.
-	SessionID() string
-	// SessionRelease releases resource and save data to provider.
-	SessionRelease(w http.ResponseWriter)
+	// ID returns current session ID.
+	ID() string
+	// Release releases session resource and save data to provider.
+	Release() error
 	// Flush deletes all session data.
 	Flush() error
 }
@@ -55,12 +53,12 @@ type RawStore interface {
 // Store is the interface that contains all data for one session process with specific ID.
 type Store interface {
 	RawStore
-	// GetSessionStore returns raw session store by session ID.
-	GetSessionStore(string) (RawStore, error)
-	// Destory deletes a session by session ID.
-	Destory(string) error
-	// GetActiveSession returns number of active sessions.
-	GetActiveSession() int
+	// Read returns raw session store by session ID.
+	Read(sid string) (RawStore, error)
+	// Destory deletes a session.
+	Destory(*macaron.Context) error
+	// Count counts and returns number of sessions.
+	Count() int
 	// GC calls GC to clean expired sessions.
 	GC()
 }
@@ -69,6 +67,8 @@ type store struct {
 	RawStore
 	*Manager
 }
+
+var _ Store = &store{}
 
 // Config represents session provider configuration.
 type Config struct {
@@ -81,7 +81,7 @@ type Config struct {
 	CookieLifeTime  int    `json:"cookieLifeTime"`
 	ProviderConfig  string `json:"providerConfig"`
 	Domain          string `json:"domain"`
-	SessionIDLength int64  `json:"sessionIdLength"`
+	SessionIDLength int    `json:"sessionIdLength"`
 }
 
 // Options represents a struct for specifying configuration options for the session middleware.
@@ -130,11 +130,11 @@ func Sessioner(options ...Options) macaron.Handler {
 	if err != nil {
 		panic(err)
 	}
-	go manager.GC()
+	go manager.startGC()
 
 	return func(ctx *macaron.Context) {
 		// FIXME: should I panic for error?
-		sess, _ := manager.SessionStart(ctx)
+		sess, _ := manager.Start(ctx)
 
 		// Get flash.
 		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
@@ -164,26 +164,27 @@ func Sessioner(options ...Options) macaron.Handler {
 
 		ctx.Next()
 
-		sess.SessionRelease(ctx.Resp)
+		// FIXME: should I panic for error?
+		sess.Release()
 	}
 }
 
 // Provider is the interface that provides session manipulations.
 type Provider interface {
-	// SessionInit initializes session provider.
-	SessionInit(gclifetime int64, config string) error
-	// SessionRead returns raw session store by session ID.
-	SessionRead(sid string) (RawStore, error)
-	// SessionExist returns true if session with given ID exists.
-	SessionExist(sid string) bool
-	// SessionRegenerate regenerates a session store from old session ID to new one.
-	SessionRegenerate(oldsid, sid string) (RawStore, error)
-	// SessionDestroy deletes a session by session ID.
-	SessionDestroy(sid string) error
-	// SessionAll returns number of active sessions.
-	SessionAll() int
-	// SessionGC calls GC to clean expired sessions.
-	SessionGC()
+	// Init initializes session provider.
+	Init(gclifetime int64, config string) error
+	// Read returns raw session store by session ID.
+	Read(sid string) (RawStore, error)
+	// Exist returns true if session with given ID exists.
+	Exist(sid string) bool
+	// Destory deletes a session by session ID.
+	Destory(sid string) error
+	// Regenerate regenerates a session store from old session ID to new one.
+	Regenerate(oldsid, sid string) (RawStore, error)
+	// Count counts and returns number of sessions.
+	Count() int
+	// GC calls GC to clean expired sessions.
+	GC()
 }
 
 var providers = make(map[string]Provider)
@@ -219,41 +220,34 @@ func NewManager(name string, cfg *Config) (*Manager, error) {
 	if !ok {
 		return nil, fmt.Errorf("session: unknown provider ‘%q’(forgotten import?)", name)
 	}
-	if err := p.SessionInit(cfg.Maxlifetime, cfg.ProviderConfig); err != nil {
+	if err := p.Init(cfg.Maxlifetime, cfg.ProviderConfig); err != nil {
 		return nil, err
 	}
 	return &Manager{p, cfg}, nil
 }
 
 // sessionId generates a new session ID with rand string, unix nano time, remote addr by hash function.
-func (m *Manager) sessionId() (string, error) {
-	k := make([]byte, m.config.SessionIDLength)
-	if _, err := io.ReadFull(rand.Reader, k); err != nil {
-		return "", fmt.Errorf("error generating random string: %v", err)
-	}
-	return hex.EncodeToString(k), nil
+func (m *Manager) sessionId() string {
+	return hex.EncodeToString(generateRandomKey(m.config.SessionIDLength))
 }
 
-// SessionStart starts a session by generating new one
+// Start starts a session by generating new one
 // or retrieve existence one by reading session ID from HTTP request if it's valid.
-func (m *Manager) SessionStart(ctx *macaron.Context) (RawStore, error) {
+func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
 	sid := ctx.GetCookie(m.config.CookieName)
-	if len(sid) > 0 && m.provider.SessionExist(sid) {
-		return m.provider.SessionRead(sid)
+	if len(sid) > 0 && m.provider.Exist(sid) {
+		return m.provider.Read(sid)
 	}
 
-	sid, err := m.sessionId()
-	if err != nil {
-		return nil, err
-	}
-	sess, err := m.provider.SessionRead(sid)
+	sid = m.sessionId()
+	sess, err := m.provider.Read(sid)
 	if err != nil {
 		return nil, err
 	}
 
 	cookie := &http.Cookie{
 		Name:     m.config.CookieName,
-		Value:    url.QueryEscape(sid),
+		Value:    sid,
 		Path:     m.config.CookiePath,
 		HttpOnly: true,
 		Secure:   m.config.Secure,
@@ -269,20 +263,19 @@ func (m *Manager) SessionStart(ctx *macaron.Context) (RawStore, error) {
 	return sess, nil
 }
 
-// GC starts GC job in a certain period.
-func (m *Manager) GC() {
-	m.provider.SessionGC()
-	time.AfterFunc(time.Duration(m.config.Gclifetime)*time.Second, func() { m.GC() })
+// Read returns raw session store by session ID.
+func (m *Manager) Read(sid string) (RawStore, error) {
+	return m.provider.Read(sid)
 }
 
-// SessionDestroy deletes a session by given ID.
-func (m *Manager) SessionDestroy(ctx *macaron.Context) error {
+// Destory deletes a session by given ID.
+func (m *Manager) Destory(ctx *macaron.Context) error {
 	sid := ctx.GetCookie(m.config.CookieName)
 	if len(sid) == 0 {
 		return nil
 	}
 
-	if err := m.provider.SessionDestroy(sid); err != nil {
+	if err := m.provider.Destory(sid); err != nil {
 		return err
 	}
 	cookie := &http.Cookie{
@@ -296,60 +289,57 @@ func (m *Manager) SessionDestroy(ctx *macaron.Context) error {
 	return nil
 }
 
-// GetSessionStore returns raw session store by session ID.
-func (m *Manager) GetSessionStore(sid string) (RawStore, error) {
-	return m.provider.SessionRead(sid)
-}
-
-// Destory deletes a session by session ID.
-func (m *Manager) Destory(sid string) error {
-	return m.provider.SessionDestroy(sid)
-}
-
-// GetActiveSession returns number of active sessions.
-func (m *Manager) GetActiveSession() int {
-	return m.provider.SessionAll()
-}
-
-// SessionRegenerate regenerates a session store from old session ID to new one.
-func (m *Manager) SessionRegenerateId(w http.ResponseWriter, r *http.Request) (session RawStore) {
-	sid, err := m.sessionId()
-	if err != nil {
-		return nil
-	}
-
-	cookie, err := r.Cookie(m.config.CookieName)
-	if err != nil && cookie.Value == "" {
-		session, err = m.provider.SessionRead(sid)
+// RegenerateId regenerates a session store from old session ID to new one.
+func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore) {
+	sid := m.sessionId()
+	var (
+		ck  *http.Cookie
+		err error
+	)
+	oldsid := ctx.GetCookie(m.config.CookieName)
+	if len(oldsid) == 0 {
+		sess, err = m.provider.Read(oldsid)
 		if err != nil {
 			return nil
 		}
-		cookie = &http.Cookie{Name: m.config.CookieName,
-			Value:    url.QueryEscape(sid),
+		ck = &http.Cookie{Name: m.config.CookieName,
+			Value:    sid,
 			Path:     m.config.CookiePath,
 			HttpOnly: true,
 			Secure:   m.config.Secure,
 			Domain:   m.config.Domain,
 		}
 	} else {
-		oldsid, err := url.QueryUnescape(cookie.Value)
+		sess, err = m.provider.Regenerate(oldsid, sid)
 		if err != nil {
 			return nil
 		}
-		session, err = m.provider.SessionRegenerate(oldsid, sid)
-		if err != nil {
-			return nil
-		}
-		cookie.Value = url.QueryEscape(sid)
-		cookie.HttpOnly = true
-		cookie.Path = "/"
+		ck.Value = sid
+		ck.HttpOnly = true
+		ck.Path = "/"
 	}
 	if m.config.CookieLifeTime >= 0 {
-		cookie.MaxAge = m.config.CookieLifeTime
+		ck.MaxAge = m.config.CookieLifeTime
 	}
-	http.SetCookie(w, cookie)
-	r.AddCookie(cookie)
-	return session
+	http.SetCookie(ctx.Resp, ck)
+	ctx.Req.AddCookie(ck)
+	return sess
+}
+
+// Count counts and returns number of sessions.
+func (m *Manager) Count() int {
+	return m.provider.Count()
+}
+
+// GC starts GC job in a certain period.
+func (m *Manager) GC() {
+	m.provider.GC()
+}
+
+// startGC starts GC job in a certain period.
+func (m *Manager) startGC() {
+	m.GC()
+	time.AfterFunc(time.Duration(m.config.Gclifetime)*time.Second, func() { m.startGC() })
 }
 
 // SetSecure indicates whether to set cookie with HTTPS or not.
