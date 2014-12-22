@@ -133,8 +133,10 @@ func Sessioner(options ...Options) macaron.Handler {
 	go manager.startGC()
 
 	return func(ctx *macaron.Context) {
-		// FIXME: should I panic for error?
-		sess, _ := manager.Start(ctx)
+		sess, err := manager.Start(ctx)
+		if err != nil {
+			panic("session: " + err.Error())
+		}
 
 		// Get flash.
 		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
@@ -160,12 +162,14 @@ func Sessioner(options ...Options) macaron.Handler {
 			RawStore: sess,
 			Manager:  manager,
 		}
+
 		ctx.MapTo(s, (*Store)(nil))
 
 		ctx.Next()
 
-		// FIXME: should I panic for error?
-		sess.Release()
+		if sess.Release() != nil {
+			panic("session: " + err.Error())
+		}
 	}
 }
 

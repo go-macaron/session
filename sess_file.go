@@ -129,7 +129,7 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 	} else {
 		f, err = os.Create(filename)
 	}
-	if err == nil {
+	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
