@@ -222,6 +222,10 @@ func (p *FileProvider) Count() int {
 
 // GC calls GC to clean expired sessions.
 func (p *FileProvider) GC() {
+	if !com.IsExist(p.rootPath) {
+		return
+	}
+
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
