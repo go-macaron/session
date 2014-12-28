@@ -1,4 +1,4 @@
-session
+session [![Build Status](https://drone.io/github.com/macaron-contrib/session/status.png)](https://drone.io/github.com/macaron-contrib/session/latest)
 =======
 
 Middleware session is the session manager of [Macaron](https://github.com/Unknwon/macaron). It can use many session providers, including cookie, memory, file, redis, memcache, PostgreSQL, MySQL, and couchbase.
@@ -20,12 +20,12 @@ import (
 func main() {
   	m := macaron.Classic()
   	m.Use(session.Sessioner())
-	
+
 	m.Get("/", func(sess session.Store) string {
 		sess.Set("session", "session middleware")
 		return sess.Get("session").(string)
 	})
-	
+
 	m.Get("/signup", func(ctx *macaron.Context, f *session.Flash) {
 		f.Success("yes!!!")
 		f.Error("opps...")
@@ -149,8 +149,8 @@ m.Use(session.Sessioner(session.Options{
 
 When you develop a web app, maybe you want to write own provider because you must meet the requirements.
 
-Writing a provider is easy. You only need to define two struct types 
-(Session and Provider), which satisfy the interface definition. 
+Writing a provider is easy. You only need to define two struct types
+(Session and Provider), which satisfy the interface definition.
 Maybe you will find the **memory** provider is a good example.
 
 	type Store interface {
@@ -161,7 +161,7 @@ Maybe you will find the **memory** provider is a good example.
 		SessionRelease(w http.ResponseWriter) // release the resource & save data to provider & return the data
 		Flush() error                         //delete all data
 	}
-	
+
 	type Provider interface {
 		SessionInit(gclifetime int64, config string) error
 		SessionRead(sid string) (SessionStore, error)

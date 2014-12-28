@@ -28,7 +28,7 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
-const _VERSION = "0.1.0"
+const _VERSION = "0.1.1"
 
 func Version() string {
 	return _VERSION
@@ -57,6 +57,8 @@ type Store interface {
 	Read(sid string) (RawStore, error)
 	// Destory deletes a session.
 	Destory(*macaron.Context) error
+	// RegenerateId regenerates a session store from old session ID to new one.
+	RegenerateId(*macaron.Context) (RawStore, error)
 	// Count counts and returns number of sessions.
 	Count() int
 	// GC calls GC to clean expired sessions.
@@ -72,14 +74,13 @@ var _ Store = &store{}
 
 // Config represents session provider configuration.
 type Config struct {
+	ProviderConfig  string `json:"providerConfig"`
 	CookieName      string `json:"cookieName"`
 	CookiePath      string `json:"cookiePath"`
-	EnableSetCookie bool   `json:"enableSetCookie,omitempty"`
 	Gclifetime      int64  `json:"gclifetime"`
 	Maxlifetime     int64  `json:"maxLifetime"`
 	Secure          bool   `json:"secure"`
 	CookieLifeTime  int    `json:"cookieLifeTime"`
-	ProviderConfig  string `json:"providerConfig"`
 	Domain          string `json:"domain"`
 	SessionIDLength int    `json:"sessionIdLength"`
 }
@@ -90,6 +91,8 @@ type Options struct {
 	Provider string
 	// Provider configuration.
 	Config
+	// Configuration section name. Default is "session".
+	Section string
 }
 
 func prepareOptions(options []Options) Options {
@@ -98,25 +101,40 @@ func prepareOptions(options []Options) Options {
 		opt = options[0]
 	}
 
-	// Defaults.
-	if len(opt.Provider) == 0 {
-		opt.Provider = "memory"
+	if len(opt.Section) == 0 {
+		opt.Section = "session"
 	}
-	opt.EnableSetCookie = true
+	sec := macaron.Config().Section(opt.Section)
+
+	if len(opt.Provider) == 0 {
+		opt.Provider = sec.Key("PROVIDER").MustString("memory")
+	}
+	if len(opt.ProviderConfig) == 0 && opt.Provider == "file" {
+		opt.ProviderConfig = sec.Key("PROVIDER_CONFIG").MustString("data/sessions")
+	}
 	if len(opt.CookieName) == 0 {
-		opt.CookieName = "MacaronSession"
+		opt.CookieName = sec.Key("COOKIE_NAME").MustString("MacaronSession")
 	}
 	if len(opt.CookiePath) == 0 {
-		opt.CookiePath = "/"
+		opt.CookiePath = sec.Key("COOKIE_PATH").MustString("/")
 	}
 	if opt.Gclifetime == 0 {
-		opt.Gclifetime = 3600
+		opt.Gclifetime = sec.Key("GC_INTERVAL_TIME").MustInt64(3600)
 	}
 	if opt.Maxlifetime == 0 {
-		opt.Maxlifetime = opt.Gclifetime
+		opt.Maxlifetime = sec.Key("MAX_LIFE_TIME").MustInt64(opt.Gclifetime)
+	}
+	if !opt.Secure {
+		opt.Secure = sec.Key("SECURE").MustBool()
+	}
+	if opt.CookieLifeTime == 0 {
+		opt.CookieLifeTime = sec.Key("COOKIE_LIFE_TIME").MustInt()
+	}
+	if len(opt.Domain) == 0 {
+		opt.Domain = sec.Key("DOMAIN").String()
 	}
 	if opt.SessionIDLength == 0 {
-		opt.SessionIDLength = 16
+		opt.SessionIDLength = sec.Key("ID_LENGTH").MustInt(16)
 	}
 
 	return opt
@@ -260,9 +278,7 @@ func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
 	if m.config.CookieLifeTime >= 0 {
 		cookie.MaxAge = m.config.CookieLifeTime
 	}
-	if m.config.EnableSetCookie {
-		http.SetCookie(ctx.Resp, cookie)
-	}
+	http.SetCookie(ctx.Resp, cookie)
 	ctx.Req.AddCookie(cookie)
 	return sess, nil
 }
@@ -294,40 +310,34 @@ func (m *Manager) Destory(ctx *macaron.Context) error {
 }
 
 // RegenerateId regenerates a session store from old session ID to new one.
-func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore) {
+func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) {
 	sid := m.sessionId()
-	var (
-		ck  *http.Cookie
-		err error
-	)
 	oldsid := ctx.GetCookie(m.config.CookieName)
 	if len(oldsid) == 0 {
 		sess, err = m.provider.Read(oldsid)
 		if err != nil {
-			return nil
-		}
-		ck = &http.Cookie{Name: m.config.CookieName,
-			Value:    sid,
-			Path:     m.config.CookiePath,
-			HttpOnly: true,
-			Secure:   m.config.Secure,
-			Domain:   m.config.Domain,
+			return nil, err
 		}
 	} else {
 		sess, err = m.provider.Regenerate(oldsid, sid)
 		if err != nil {
-			return nil
+			return nil, err
 		}
-		ck.Value = sid
-		ck.HttpOnly = true
-		ck.Path = "/"
+	}
+	ck := &http.Cookie{
+		Name:     m.config.CookieName,
+		Value:    sid,
+		Path:     m.config.CookiePath,
+		HttpOnly: true,
+		Secure:   m.config.Secure,
+		Domain:   m.config.Domain,
 	}
 	if m.config.CookieLifeTime >= 0 {
 		ck.MaxAge = m.config.CookieLifeTime
 	}
 	http.SetCookie(ctx.Resp, ck)
 	ctx.Req.AddCookie(ck)
-	return sess
+	return sess, nil
 }
 
 // Count counts and returns number of sessions.

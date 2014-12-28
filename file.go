@@ -170,33 +170,43 @@ func (p *FileProvider) Destory(sid string) error {
 	return os.Remove(p.filepath(sid))
 }
 
-// Regenerate regenerates a session store from old session ID to new one.
-func (p *FileProvider) Regenerate(oldsid, sid string) (_ RawStore, err error) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
+func (p *FileProvider) regenerate(oldsid, sid string) (err error) {
 	filename := p.filepath(sid)
 	if com.IsExist(filename) {
-		return nil, fmt.Errorf("new sid '%s' already exists", sid)
+		return fmt.Errorf("new sid '%s' already exists", sid)
 	}
 
 	oldname := p.filepath(oldsid)
 	if !com.IsFile(oldname) {
 		data, err := EncodeGob(make(map[interface{}]interface{}))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err = os.MkdirAll(path.Dir(oldname), os.ModePerm); err != nil {
-			return nil, err
+			return err
 		}
 		if err = ioutil.WriteFile(oldname, data, os.ModePerm); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
+	if err = os.MkdirAll(path.Dir(filename), os.ModePerm); err != nil {
+		return err
+	}
 	if err = os.Rename(oldname, filename); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Regenerate regenerates a session store from old session ID to new one.
+func (p *FileProvider) Regenerate(oldsid, sid string) (_ RawStore, err error) {
+	p.lock.Lock()
+	if err := p.regenerate(oldsid, sid); err != nil {
+		p.lock.Unlock()
 		return nil, err
 	}
+	p.lock.Unlock()
 
 	return p.Read(sid)
 }
