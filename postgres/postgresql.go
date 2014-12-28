@@ -15,35 +15,6 @@
 
 package session
 
-/*
-
-beego session provider for postgresql
--------------------------------------
-
-depends on github.com/lib/pq:
-
-go install github.com/lib/pq
-
-
-needs this table in your database:
-
-CREATE TABLE session (
-session_key	char(64) NOT NULL,
-session_data	bytea,
-session_expiry	timestamp NOT NULL,
-CONSTRAINT session_key PRIMARY KEY(session_key)
-);
-
-
-will be activated with these settings in app.conf:
-
-SessionOn = true
-SessionProvider = postgresql
-SessionSavePath = "user=a password=b dbname=c sslmode=disable"
-SessionName = session
-
-*/
-
 import (
 	"database/sql"
 	"sync"

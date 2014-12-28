@@ -72,25 +72,19 @@ type store struct {
 
 var _ Store = &store{}
 
-// Config represents session provider configuration.
-type Config struct {
-	ProviderConfig  string `json:"providerConfig"`
-	CookieName      string `json:"cookieName"`
-	CookiePath      string `json:"cookiePath"`
-	Gclifetime      int64  `json:"gclifetime"`
-	Maxlifetime     int64  `json:"maxLifetime"`
-	Secure          bool   `json:"secure"`
-	CookieLifeTime  int    `json:"cookieLifeTime"`
-	Domain          string `json:"domain"`
-	SessionIDLength int    `json:"sessionIdLength"`
-}
-
 // Options represents a struct for specifying configuration options for the session middleware.
 type Options struct {
-	// Name of provider. Default is memory.
-	Provider string
-	// Provider configuration.
-	Config
+	// Name of provider. Default is "memory".
+	Provider       string
+	ProviderConfig string `json:"providerConfig"`
+	CookieName     string `json:"cookieName"`
+	CookiePath     string `json:"cookiePath"`
+	Gclifetime     int64  `json:"gclifetime"`
+	Maxlifetime    int64  `json:"maxLifetime"`
+	Secure         bool   `json:"secure"`
+	CookieLifeTime int    `json:"cookieLifeTime"`
+	Domain         string `json:"domain"`
+	IDLength       int    `json:"sessionIdLength"`
 	// Configuration section name. Default is "session".
 	Section string
 }
@@ -133,8 +127,8 @@ func prepareOptions(options []Options) Options {
 	if len(opt.Domain) == 0 {
 		opt.Domain = sec.Key("DOMAIN").String()
 	}
-	if opt.SessionIDLength == 0 {
-		opt.SessionIDLength = sec.Key("ID_LENGTH").MustInt(16)
+	if opt.IDLength == 0 {
+		opt.IDLength = sec.Key("ID_LENGTH").MustInt(16)
 	}
 
 	return opt
@@ -144,7 +138,7 @@ func prepareOptions(options []Options) Options {
 // An single variadic session.Options struct can be optionally provided to configure.
 func Sessioner(options ...Options) macaron.Handler {
 	opt := prepareOptions(options)
-	manager, err := NewManager(opt.Provider, &opt.Config)
+	manager, err := NewManager(opt.Provider, opt)
 	if err != nil {
 		panic(err)
 	}
@@ -232,31 +226,31 @@ func Register(name string, provider Provider) {
 // Manager represents a struct that contains session provider and its configuration.
 type Manager struct {
 	provider Provider
-	config   *Config
+	opt      Options
 }
 
 // NewManager creates and returns a new session manager by given provider name and configuration.
 // It panics when given provider isn't registered.
-func NewManager(name string, cfg *Config) (*Manager, error) {
+func NewManager(name string, opt Options) (*Manager, error) {
 	p, ok := providers[name]
 	if !ok {
 		return nil, fmt.Errorf("session: unknown provider ‘%q’(forgotten import?)", name)
 	}
-	if err := p.Init(cfg.Maxlifetime, cfg.ProviderConfig); err != nil {
+	if err := p.Init(opt.Maxlifetime, opt.ProviderConfig); err != nil {
 		return nil, err
 	}
-	return &Manager{p, cfg}, nil
+	return &Manager{p, opt}, nil
 }
 
 // sessionId generates a new session ID with rand string, unix nano time, remote addr by hash function.
 func (m *Manager) sessionId() string {
-	return hex.EncodeToString(generateRandomKey(m.config.SessionIDLength))
+	return hex.EncodeToString(generateRandomKey(m.opt.IDLength))
 }
 
 // Start starts a session by generating new one
 // or retrieve existence one by reading session ID from HTTP request if it's valid.
 func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
-	sid := ctx.GetCookie(m.config.CookieName)
+	sid := ctx.GetCookie(m.opt.CookieName)
 	if len(sid) > 0 && m.provider.Exist(sid) {
 		return m.provider.Read(sid)
 	}
@@ -268,15 +262,15 @@ func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
 	}
 
 	cookie := &http.Cookie{
-		Name:     m.config.CookieName,
+		Name:     m.opt.CookieName,
 		Value:    sid,
-		Path:     m.config.CookiePath,
+		Path:     m.opt.CookiePath,
 		HttpOnly: true,
-		Secure:   m.config.Secure,
-		Domain:   m.config.Domain,
+		Secure:   m.opt.Secure,
+		Domain:   m.opt.Domain,
 	}
-	if m.config.CookieLifeTime >= 0 {
-		cookie.MaxAge = m.config.CookieLifeTime
+	if m.opt.CookieLifeTime >= 0 {
+		cookie.MaxAge = m.opt.CookieLifeTime
 	}
 	http.SetCookie(ctx.Resp, cookie)
 	ctx.Req.AddCookie(cookie)
@@ -290,7 +284,7 @@ func (m *Manager) Read(sid string) (RawStore, error) {
 
 // Destory deletes a session by given ID.
 func (m *Manager) Destory(ctx *macaron.Context) error {
-	sid := ctx.GetCookie(m.config.CookieName)
+	sid := ctx.GetCookie(m.opt.CookieName)
 	if len(sid) == 0 {
 		return nil
 	}
@@ -299,8 +293,8 @@ func (m *Manager) Destory(ctx *macaron.Context) error {
 		return err
 	}
 	cookie := &http.Cookie{
-		Name:     m.config.CookieName,
-		Path:     m.config.CookiePath,
+		Name:     m.opt.CookieName,
+		Path:     m.opt.CookiePath,
 		HttpOnly: true,
 		Expires:  time.Now(),
 		MaxAge:   -1,
@@ -312,7 +306,7 @@ func (m *Manager) Destory(ctx *macaron.Context) error {
 // RegenerateId regenerates a session store from old session ID to new one.
 func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) {
 	sid := m.sessionId()
-	oldsid := ctx.GetCookie(m.config.CookieName)
+	oldsid := ctx.GetCookie(m.opt.CookieName)
 	if len(oldsid) == 0 {
 		sess, err = m.provider.Read(oldsid)
 		if err != nil {
@@ -325,15 +319,15 @@ func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) 
 		}
 	}
 	ck := &http.Cookie{
-		Name:     m.config.CookieName,
+		Name:     m.opt.CookieName,
 		Value:    sid,
-		Path:     m.config.CookiePath,
+		Path:     m.opt.CookiePath,
 		HttpOnly: true,
-		Secure:   m.config.Secure,
-		Domain:   m.config.Domain,
+		Secure:   m.opt.Secure,
+		Domain:   m.opt.Domain,
 	}
-	if m.config.CookieLifeTime >= 0 {
-		ck.MaxAge = m.config.CookieLifeTime
+	if m.opt.CookieLifeTime >= 0 {
+		ck.MaxAge = m.opt.CookieLifeTime
 	}
 	http.SetCookie(ctx.Resp, ck)
 	ctx.Req.AddCookie(ck)
@@ -353,12 +347,12 @@ func (m *Manager) GC() {
 // startGC starts GC job in a certain period.
 func (m *Manager) startGC() {
 	m.GC()
-	time.AfterFunc(time.Duration(m.config.Gclifetime)*time.Second, func() { m.startGC() })
+	time.AfterFunc(time.Duration(m.opt.Gclifetime)*time.Second, func() { m.startGC() })
 }
 
 // SetSecure indicates whether to set cookie with HTTPS or not.
 func (m *Manager) SetSecure(secure bool) {
-	m.config.Secure = secure
+	m.opt.Secure = secure
 }
 
 // ___________.____       _____    _________ ___ ___

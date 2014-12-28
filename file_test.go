@@ -27,10 +27,8 @@ func Test_FileProvider(t *testing.T) {
 		dir := path.Join(os.TempDir(), "data/sessions")
 		os.RemoveAll(dir)
 		testProvider(Options{
-			Provider: "file",
-			Config: Config{
-				ProviderConfig: dir,
-			},
+			Provider:       "file",
+			ProviderConfig: dir,
 		})
 	})
 }
