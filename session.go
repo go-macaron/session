@@ -75,16 +75,25 @@ var _ Store = &store{}
 // Options represents a struct for specifying configuration options for the session middleware.
 type Options struct {
 	// Name of provider. Default is "memory".
-	Provider       string
-	ProviderConfig string `json:"providerConfig"`
-	CookieName     string `json:"cookieName"`
-	CookiePath     string `json:"cookiePath"`
-	Gclifetime     int64  `json:"gclifetime"`
-	Maxlifetime    int64  `json:"maxLifetime"`
-	Secure         bool   `json:"secure"`
-	CookieLifeTime int    `json:"cookieLifeTime"`
-	Domain         string `json:"domain"`
-	IDLength       int    `json:"sessionIdLength"`
+	Provider string
+	// Provider configuration, it's corresponding to provider.
+	ProviderConfig string
+	// Cookie name to save session ID. Default is "MacaronSession".
+	CookieName string
+	// Cookie path to store. Default is "/".
+	CookiePath string
+	// GC interval time in seconds. Default is 3600.
+	Gclifetime int64
+	// Max life time in seconds. Default is whatever GC interval time is.
+	Maxlifetime int64
+	// Use HTTPS only. Default is false.
+	Secure bool
+	// Cookie life time. Default is 0.
+	CookieLifeTime int
+	// Cookie domain name. Default is empty.
+	Domain string
+	// Session ID length. Default is 16.
+	IDLength int
 	// Configuration section name. Default is "session".
 	Section string
 }
@@ -94,7 +103,6 @@ func prepareOptions(options []Options) Options {
 	if len(options) > 0 {
 		opt = options[0]
 	}
-
 	if len(opt.Section) == 0 {
 		opt.Section = "session"
 	}
