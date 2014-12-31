@@ -37,11 +37,11 @@ func Version() string {
 // RawStore is the interface that operates the session data.
 type RawStore interface {
 	// Set sets value to given key in session.
-	Set(key, value interface{}) error
+	Set(interface{}, interface{}) error
 	// Get gets value by given key in session.
-	Get(key interface{}) interface{}
-	// Delete delete a key from session.
-	Delete(key interface{}) error
+	Get(interface{}) interface{}
+	// Delete deletes a key from session.
+	Delete(interface{}) error
 	// ID returns current session ID.
 	ID() string
 	// Release releases session resource and save data to provider.
@@ -54,7 +54,7 @@ type RawStore interface {
 type Store interface {
 	RawStore
 	// Read returns raw session store by session ID.
-	Read(sid string) (RawStore, error)
+	Read(string) (RawStore, error)
 	// Destory deletes a session.
 	Destory(*macaron.Context) error
 	// RegenerateId regenerates a session store from old session ID to new one.
@@ -242,12 +242,9 @@ type Manager struct {
 func NewManager(name string, opt Options) (*Manager, error) {
 	p, ok := providers[name]
 	if !ok {
-		return nil, fmt.Errorf("session: unknown provider ‘%q’(forgotten import?)", name)
+		return nil, fmt.Errorf("session: unknown provider '%s'(forgotten import?)", name)
 	}
-	if err := p.Init(opt.Maxlifetime, opt.ProviderConfig); err != nil {
-		return nil, err
-	}
-	return &Manager{p, opt}, nil
+	return &Manager{p, opt}, p.Init(opt.Maxlifetime, opt.ProviderConfig)
 }
 
 // sessionId generates a new session ID with rand string, unix nano time, remote addr by hash function.
