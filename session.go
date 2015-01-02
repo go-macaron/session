@@ -13,7 +13,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-// Package session a middleware that provides the session manager of Macaron.
+// Package session a middleware that provides the session management of Macaron.
 package session
 
 // NOTE: last sync 000033e on Nov 4, 2014.
@@ -28,7 +28,7 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
-const _VERSION = "0.1.1"
+const _VERSION = "0.1.2"
 
 func Version() string {
 	return _VERSION
@@ -111,7 +111,7 @@ func prepareOptions(options []Options) Options {
 	if len(opt.Provider) == 0 {
 		opt.Provider = sec.Key("PROVIDER").MustString("memory")
 	}
-	if len(opt.ProviderConfig) == 0 && opt.Provider == "file" {
+	if len(opt.ProviderConfig) == 0 {
 		opt.ProviderConfig = sec.Key("PROVIDER_CONFIG").MustString("data/sessions")
 	}
 	if len(opt.CookieName) == 0 {
