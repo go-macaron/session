@@ -28,15 +28,23 @@ import (
 	"github.com/macaron-contrib/session"
 )
 
-// FIXME: would *Redis.Client reconnects automatically?
-
 // RedisStore represents a redis session store implementation.
 type RedisStore struct {
-	sid      string
 	c        *redis.Client
+	sid      string
 	duration time.Duration
 	lock     sync.RWMutex
 	data     map[interface{}]interface{}
+}
+
+// NewRedisStore creates and returns a redis session store.
+func NewRedisStore(c *redis.Client, sid string, dur time.Duration, kv map[interface{}]interface{}) *RedisStore {
+	return &RedisStore{
+		c:        c,
+		sid:      sid,
+		duration: dur,
+		data:     kv,
+	}
 }
 
 // Set sets value to given key in session.
@@ -141,6 +149,12 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 	var kv map[interface{}]interface{}
 
+	if !p.Exist(sid) {
+		if err := p.c.Set(sid, "").Err(); err != nil {
+			return nil, err
+		}
+	}
+
 	kvs, err := p.c.Get(sid).Result()
 	if len(kvs) == 0 {
 		kv = make(map[interface{}]interface{})
@@ -151,7 +165,7 @@ func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 		}
 	}
 
-	return &RedisStore{sid, p.c, p.duration, sync.RWMutex{}, kv}, nil
+	return NewRedisStore(p.c, sid, p.duration, kv), nil
 }
 
 // Exist returns true if session with given ID exists.
@@ -198,7 +212,7 @@ func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err 
 		}
 	}
 
-	return &RedisStore{sid, p.c, p.duration, sync.RWMutex{}, kv}, nil
+	return NewRedisStore(p.c, sid, p.duration, kv), nil
 }
 
 // Count counts and returns number of sessions.

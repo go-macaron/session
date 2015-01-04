@@ -12,6 +12,10 @@ Middleware session provides session management for [Macaron](https://github.com/
 - [API Reference](https://gowalker.org/github.com/macaron-contrib/session)
 - [Documentation](http://macaron.gogs.io/docs/middlewares/session)
 
+## Credits
+
+This package is forked from [beego/session](https://github.com/astaxie/beego/tree/master/session) with modifications.
+
 ## License
 
 This project is under Apache v2 License. See the [LICENSE](LICENSE) file for the full license text.

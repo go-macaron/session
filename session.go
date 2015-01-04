@@ -155,7 +155,7 @@ func Sessioner(options ...Options) macaron.Handler {
 	return func(ctx *macaron.Context) {
 		sess, err := manager.Start(ctx)
 		if err != nil {
-			panic("session: " + err.Error())
+			panic("session(start): " + err.Error())
 		}
 
 		// Get flash.
@@ -188,7 +188,7 @@ func Sessioner(options ...Options) macaron.Handler {
 		ctx.Next()
 
 		if err = sess.Release(); err != nil {
-			panic("session: " + err.Error())
+			panic("session(release): " + err.Error())
 		}
 	}
 }
@@ -249,7 +249,7 @@ func NewManager(name string, opt Options) (*Manager, error) {
 
 // sessionId generates a new session ID with rand string, unix nano time, remote addr by hash function.
 func (m *Manager) sessionId() string {
-	return hex.EncodeToString(generateRandomKey(m.opt.IDLength))
+	return hex.EncodeToString(generateRandomKey(m.opt.IDLength / 2))
 }
 
 // Start starts a session by generating new one
@@ -312,16 +312,9 @@ func (m *Manager) Destory(ctx *macaron.Context) error {
 func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) {
 	sid := m.sessionId()
 	oldsid := ctx.GetCookie(m.opt.CookieName)
-	if len(oldsid) == 0 {
-		sess, err = m.provider.Read(oldsid)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		sess, err = m.provider.Regenerate(oldsid, sid)
-		if err != nil {
-			return nil, err
-		}
+	sess, err = m.provider.Regenerate(oldsid, sid)
+	if err != nil {
+		return nil, err
 	}
 	ck := &http.Cookie{
 		Name:     m.opt.CookieName,

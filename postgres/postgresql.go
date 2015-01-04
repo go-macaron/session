@@ -17,6 +17,8 @@ package session
 
 import (
 	"database/sql"
+	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -25,16 +27,25 @@ import (
 	"github.com/macaron-contrib/session"
 )
 
-// PostgresqlSessionStore represents a postgresql session store implementation.
-type PostgresqlSessionStore struct {
+// PostgresStore represents a postgres session store implementation.
+type PostgresStore struct {
 	c    *sql.DB
 	sid  string
 	lock sync.RWMutex
 	data map[interface{}]interface{}
 }
 
+// NewPostgresStore creates and returns a postgres session store.
+func NewPostgresStore(c *sql.DB, sid string, kv map[interface{}]interface{}) *PostgresStore {
+	return &PostgresStore{
+		c:    c,
+		sid:  sid,
+		data: kv,
+	}
+}
+
 // Set sets value to given key in session.
-func (s *PostgresqlSessionStore) Set(key, value interface{}) error {
+func (s *PostgresStore) Set(key, value interface{}) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -43,7 +54,7 @@ func (s *PostgresqlSessionStore) Set(key, value interface{}) error {
 }
 
 // Get gets value by given key in session.
-func (s *PostgresqlSessionStore) Get(key interface{}) interface{} {
+func (s *PostgresStore) Get(key interface{}) interface{} {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -51,7 +62,7 @@ func (s *PostgresqlSessionStore) Get(key interface{}) interface{} {
 }
 
 // Delete delete a key from session.
-func (s *PostgresqlSessionStore) Delete(key interface{}) error {
+func (s *PostgresStore) Delete(key interface{}) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -60,27 +71,25 @@ func (s *PostgresqlSessionStore) Delete(key interface{}) error {
 }
 
 // ID returns current session ID.
-func (s *PostgresqlSessionStore) ID() string {
+func (s *PostgresStore) ID() string {
 	return s.sid
 }
 
-// save postgresql session values to database.
+// save postgres session values to database.
 // must call this method to save values to database.
-func (s *PostgresqlSessionStore) Release() error {
-	defer s.c.Close()
-
+func (s *PostgresStore) Release() error {
 	data, err := session.EncodeGob(s.data)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.c.Exec("UPDATE session set session_data=$1, session_expiry=$2 where session_key=$3",
-		data, time.Now().Format(time.RFC3339), s.sid)
+	_, err = s.c.Exec("UPDATE session SET data=$1, expiry=$2 WHERE key=$3",
+		data, time.Now().Unix(), s.sid)
 	return err
 }
 
 // Flush deletes all session data.
-func (s *PostgresqlSessionStore) Flush() error {
+func (s *PostgresStore) Flush() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -88,124 +97,101 @@ func (s *PostgresqlSessionStore) Flush() error {
 	return nil
 }
 
-// PostgresqlProvider represents a postgresql session provider implementation.
-type PostgresqlProvider struct {
+// PostgresProvider represents a postgres session provider implementation.
+type PostgresProvider struct {
+	c           *sql.DB
 	maxlifetime int64
-	connStr     string
 }
 
-func (p *PostgresqlProvider) connectInit() *sql.DB {
-	db, e := sql.Open("postgres", p.connStr)
-	if e != nil {
-		return nil
-	}
-	return db
-}
-
-// Init initializes memory session provider.
-func (p *PostgresqlProvider) Init(maxlifetime int64, connStr string) error {
+// Init initializes postgres session provider.
+// connStr: user=a password=b host=localhost port=5432 dbname=c sslmode=disable
+func (p *PostgresProvider) Init(maxlifetime int64, connStr string) (err error) {
 	p.maxlifetime = maxlifetime
-	p.connStr = connStr
-	return nil
+
+	p.c, err = sql.Open("postgres", connStr)
+	if err != nil {
+		return err
+	}
+	return p.c.Ping()
 }
 
 // Read returns raw session store by session ID.
-func (p *PostgresqlProvider) Read(sid string) (session.RawStore, error) {
-	c := p.connectInit()
-	row := c.QueryRow("select session_data from session where session_key=$1", sid)
-	var sessiondata []byte
-	err := row.Scan(&sessiondata)
+func (p *PostgresProvider) Read(sid string) (session.RawStore, error) {
+	row := p.c.QueryRow("SELECT data FROM session WHERE key=$1", sid)
+	var data []byte
+	err := row.Scan(&data)
 	if err == sql.ErrNoRows {
-		_, err = c.Exec("insert into session(session_key,session_data,session_expiry) values($1,$2,$3)",
-			sid, "", time.Now().Format(time.RFC3339))
-
-		if err != nil {
-			return nil, err
-		}
-	} else if err != nil {
+		_, err = p.c.Exec("INSERT INTO session(key,data,expiry) VALUES($1,$2,$3)",
+			sid, "", time.Now().Unix())
+	}
+	if err != nil {
 		return nil, err
 	}
 
 	var kv map[interface{}]interface{}
-	if len(sessiondata) == 0 {
+	if len(data) == 0 {
 		kv = make(map[interface{}]interface{})
 	} else {
-		kv, err = session.DecodeGob(sessiondata)
+		kv, err = session.DecodeGob(data)
 		if err != nil {
 			return nil, err
 		}
 	}
-	rs := &PostgresqlSessionStore{c: c, sid: sid, data: kv}
-	return rs, nil
+
+	return NewPostgresStore(p.c, sid, kv), nil
 }
 
 // Exist returns true if session with given ID exists.
-func (p *PostgresqlProvider) Exist(sid string) bool {
-	c := p.connectInit()
-	defer c.Close()
-	row := c.QueryRow("select session_data from session where session_key=$1", sid)
-	var sessiondata []byte
-	err := row.Scan(&sessiondata)
-
-	if err == sql.ErrNoRows {
-		return false
-	} else {
-		return true
+func (p *PostgresProvider) Exist(sid string) bool {
+	var data []byte
+	err := p.c.QueryRow("SELECT data FROM session WHERE key=$1", sid).Scan(&data)
+	if err != nil && err != sql.ErrNoRows {
+		panic("session/postgres: error checking existence: " + err.Error())
 	}
+	return err != sql.ErrNoRows
 }
 
 // Destory deletes a session by session ID.
-func (p *PostgresqlProvider) Destory(sid string) (err error) {
-	c := p.connectInit()
-	if _, err = c.Exec("DELETE FROM session where session_key=$1", sid); err != nil {
-		return err
-	}
-	return c.Close()
+func (p *PostgresProvider) Destory(sid string) error {
+	_, err := p.c.Exec("DELETE FROM session WHERE key=$1", sid)
+	return err
 }
 
 // Regenerate regenerates a session store from old session ID to new one.
-func (p *PostgresqlProvider) Regenerate(oldsid, sid string) (session.RawStore, error) {
-	c := p.connectInit()
-	row := c.QueryRow("select session_data from session where session_key=$1", oldsid)
-	var sessiondata []byte
-	err := row.Scan(&sessiondata)
-	if err == sql.ErrNoRows {
-		c.Exec("insert into session(session_key,session_data,session_expiry) values($1,$2,$3)",
-			oldsid, "", time.Now().Format(time.RFC3339))
+func (p *PostgresProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err error) {
+	if p.Exist(sid) {
+		return nil, fmt.Errorf("new sid '%s' already exists", sid)
 	}
-	c.Exec("update session set session_key=$1 where session_key=$2", sid, oldsid)
-	var kv map[interface{}]interface{}
-	if len(sessiondata) == 0 {
-		kv = make(map[interface{}]interface{})
-	} else {
-		kv, err = session.DecodeGob(sessiondata)
-		if err != nil {
+
+	if !p.Exist(oldsid) {
+		if _, err = p.c.Exec("INSERT INTO session(key,data,expiry) VALUES($1,$2,$3)",
+			oldsid, "", time.Now().Unix()); err != nil {
 			return nil, err
 		}
 	}
-	rs := &PostgresqlSessionStore{c: c, sid: sid, data: kv}
-	return rs, nil
+
+	if _, err = p.c.Exec("UPDATE session SET key=$1 WHERE key=$2", sid, oldsid); err != nil {
+		return nil, err
+	}
+
+	return p.Read(sid)
 }
 
 // Count counts and returns number of sessions.
-func (p *PostgresqlProvider) Count() int {
-	c := p.connectInit()
-	defer c.Close()
-	var total int
-	err := c.QueryRow("SELECT count(*) as num from session").Scan(&total)
-	if err != nil {
-		return 0
+func (p *PostgresProvider) Count() (total int) {
+	if err := p.c.QueryRow("SELECT COUNT(*) AS NUM FROM session").Scan(&total); err != nil {
+		panic("session/postgres: error counting records: " + err.Error())
 	}
 	return total
 }
 
 // GC calls GC to clean expired sessions.
-func (mp *PostgresqlProvider) GC() {
-	c := mp.connectInit()
-	c.Exec("DELETE from session where EXTRACT(EPOCH FROM (current_timestamp - session_expiry)) > $1", mp.maxlifetime)
-	c.Close()
+func (p *PostgresProvider) GC() {
+	if _, err := p.c.Exec("DELETE FROM session WHERE EXTRACT(EPOCH FROM NOW()) - expiry > $1", p.maxlifetime); err != nil {
+		log.Printf("session/postgres: error garbage collecting: %v", err)
+	}
 }
 
 func init() {
-	session.Register("postgresql", &PostgresqlProvider{})
+	session.Register("postgres", &PostgresProvider{})
 }
