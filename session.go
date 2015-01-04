@@ -187,7 +187,7 @@ func Sessioner(options ...Options) macaron.Handler {
 
 		ctx.Next()
 
-		if sess.Release() != nil {
+		if err = sess.Release(); err != nil {
 			panic("session: " + err.Error())
 		}
 	}
