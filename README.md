@@ -14,7 +14,7 @@ Middleware session provides session management for [Macaron](https://github.com/
 
 ## Credits
 
-This package is forked from [beego/session](https://github.com/astaxie/beego/tree/master/session) with modifications.
+This package is forked from [beego/session](https://github.com/astaxie/beego/tree/master/session) with reconstruction(over 80%).
 
 ## License
 

@@ -117,9 +117,8 @@ func (p *PostgresProvider) Init(maxlifetime int64, connStr string) (err error) {
 
 // Read returns raw session store by session ID.
 func (p *PostgresProvider) Read(sid string) (session.RawStore, error) {
-	row := p.c.QueryRow("SELECT data FROM session WHERE key=$1", sid)
 	var data []byte
-	err := row.Scan(&data)
+	err := p.c.QueryRow("SELECT data FROM session WHERE key=$1", sid).Scan(&data)
 	if err == sql.ErrNoRows {
 		_, err = p.c.Exec("INSERT INTO session(key,data,expiry) VALUES($1,$2,$3)",
 			sid, "", time.Now().Unix())
