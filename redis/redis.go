@@ -147,15 +147,17 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 
 // Read returns raw session store by session ID.
 func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
-	var kv map[interface{}]interface{}
-
 	if !p.Exist(sid) {
 		if err := p.c.Set(sid, "").Err(); err != nil {
 			return nil, err
 		}
 	}
 
+	var kv map[interface{}]interface{}
 	kvs, err := p.c.Get(sid).Result()
+	if err != nil {
+		return nil, err
+	}
 	if len(kvs) == 0 {
 		kv = make(map[interface{}]interface{})
 	} else {
@@ -197,7 +199,6 @@ func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err 
 	}
 
 	var kv map[interface{}]interface{}
-
 	kvs, err := p.c.Get(sid).Result()
 	if err != nil {
 		return nil, err
