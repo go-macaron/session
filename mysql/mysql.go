@@ -98,14 +98,14 @@ func (s *MysqlStore) Flush() error {
 
 // MysqlProvider represents a mysql session provider implementation.
 type MysqlProvider struct {
-	c           *sql.DB
-	maxlifetime int64
+	c      *sql.DB
+	expire int64
 }
 
 // Init initializes mysql session provider.
 // connStr: username:password@protocol(address)/dbname?param=value
-func (p *MysqlProvider) Init(maxlifetime int64, connStr string) (err error) {
-	p.maxlifetime = maxlifetime
+func (p *MysqlProvider) Init(expire int64, connStr string) (err error) {
+	p.expire = expire
 
 	p.c, err = sql.Open("mysql", connStr)
 	if err != nil {
@@ -185,7 +185,7 @@ func (p *MysqlProvider) Count() (total int) {
 
 // GC calls GC to clean expired sessions.
 func (p *MysqlProvider) GC() {
-	if _, err := p.c.Exec("DELETE FROM session WHERE UNIX_TIMESTAMP(NOW()) - expiry > ?", p.maxlifetime); err != nil {
+	if _, err := p.c.Exec("DELETE FROM session WHERE UNIX_TIMESTAMP(NOW()) - expiry > ?", p.expire); err != nil {
 		log.Printf("session/mysql: error garbage collecting: %v", err)
 	}
 }

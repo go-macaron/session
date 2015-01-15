@@ -176,7 +176,6 @@ func (p *MemcacheProvider) Regenerate(oldsid, sid string) (_ session.RawStore, e
 	if len(item.Value) == 0 {
 		kv = make(map[interface{}]interface{})
 	} else {
-		var err error
 		kv, err = session.DecodeGob(item.Value)
 		if err != nil {
 			return nil, err

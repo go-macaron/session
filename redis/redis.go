@@ -185,9 +185,7 @@ func (p *RedisProvider) Destory(sid string) error {
 func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err error) {
 	if p.Exist(sid) {
 		return nil, fmt.Errorf("new sid '%s' already exists", sid)
-	}
-
-	if !p.Exist(oldsid) {
+	} else if !p.Exist(oldsid) {
 		// Make a fake old session.
 		if err = p.c.SetEx(oldsid, p.duration, "").Err(); err != nil {
 			return nil, err
