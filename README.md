@@ -1,7 +1,7 @@
 session [![Build Status](https://drone.io/github.com/macaron-contrib/session/status.png)](https://drone.io/github.com/macaron-contrib/session/latest) [![](http://gocover.io/_badge/github.com/macaron-contrib/session)](http://gocover.io/github.com/macaron-contrib/session)
 =======
 
-Middleware session provides session management for [Macaron](https://github.com/Unknwon/macaron). It can use many session providers, including memory, file, Redis, Memcache, PostgreSQL, MySQL, Couchbase and Ledis.
+Middleware session provides session management for [Macaron](https://github.com/Unknwon/macaron). It can use many session providers, including memory, file, Redis, Memcache, PostgreSQL, MySQL, Couchbase, Ledis and Nodb.
 
 ### Installation
 
