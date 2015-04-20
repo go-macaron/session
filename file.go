@@ -78,6 +78,9 @@ func (s *FileStore) ID() string {
 
 // Release releases resource and save data to provider.
 func (s *FileStore) Release() error {
+	s.p.lock.Lock()
+	defer s.p.lock.Unlock()
+
 	data, err := EncodeGob(s.data)
 	if err != nil {
 		return err
@@ -97,6 +100,7 @@ func (s *FileStore) Flush() error {
 
 // FileProvider represents a file session provider implementation.
 type FileProvider struct {
+	lock sync.RWMutex
 	maxlifetime int64
 	rootPath    string
 }
@@ -118,6 +122,8 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 	if err = os.MkdirAll(path.Dir(filename), os.ModePerm); err != nil {
 		return nil, err
 	}
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 
 	var f *os.File
 	if com.IsFile(filename) {
@@ -152,15 +158,22 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 
 // Exist returns true if session with given ID exists.
 func (p *FileProvider) Exist(sid string) bool {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 	return com.IsFile(p.filepath(sid))
 }
 
 // Destory deletes a session by session ID.
 func (p *FileProvider) Destory(sid string) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	return os.Remove(p.filepath(sid))
 }
 
 func (p *FileProvider) regenerate(oldsid, sid string) (err error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	
 	filename := p.filepath(sid)
 	if com.IsExist(filename) {
 		return fmt.Errorf("new sid '%s' already exists", sid)
@@ -222,6 +235,9 @@ func (p *FileProvider) GC() {
 	if !com.IsExist(p.rootPath) {
 		return
 	}
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
 	if err := filepath.Walk(p.rootPath, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
