@@ -116,13 +116,9 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 		return err
 	}
 
-	opt := &redis.Options{
-		Network: "tcp",
-	}
+	opt := &redis.Options{}
 	for k, v := range cfg.Section("").KeysHash() {
 		switch k {
-		case "network":
-			opt.Network = v
 		case "addr":
 			opt.Addr = v
 		case "password":
@@ -140,8 +136,11 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 			return fmt.Errorf("session/redis: unsupported option '%s'", k)
 		}
 	}
-
-	p.c = redis.NewClient(opt)
+	if cfg.Section("").KeysHash()["network"] == "unix" {
+		p.c = redis.NewUnixClient(opt)
+	} else {
+		p.c = redis.NewTCPClient(opt)
+	}
 	return p.c.Ping().Err()
 }
 
