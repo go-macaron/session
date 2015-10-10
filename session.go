@@ -16,8 +16,6 @@
 // Package session a middleware that provides the session management of Macaron.
 package session
 
-// NOTE: last sync 000033e on Nov 4, 2014.
-
 import (
 	"encoding/hex"
 	"fmt"
@@ -28,7 +26,7 @@ import (
 	"github.com/Unknwon/macaron"
 )
 
-const _VERSION = "0.1.6"
+const _VERSION = "0.2.0"
 
 func Version() string {
 	return _VERSION

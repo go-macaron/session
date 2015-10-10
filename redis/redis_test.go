@@ -29,7 +29,7 @@ func Test_RedisProvider(t *testing.T) {
 	Convey("Test redis session provider", t, func() {
 		opt := session.Options{
 			Provider:       "redis",
-			ProviderConfig: "addr=:6379",
+			ProviderConfig: "addr=:6379,prefix=session:",
 		}
 
 		Convey("Basic operation", func() {

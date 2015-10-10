@@ -30,17 +30,18 @@ import (
 
 // RedisStore represents a redis session store implementation.
 type RedisStore struct {
-	c        *redis.Client
-	sid      string
-	duration time.Duration
-	lock     sync.RWMutex
-	data     map[interface{}]interface{}
+	c           *redis.Client
+	prefix, sid string
+	duration    time.Duration
+	lock        sync.RWMutex
+	data        map[interface{}]interface{}
 }
 
 // NewRedisStore creates and returns a redis session store.
-func NewRedisStore(c *redis.Client, sid string, dur time.Duration, kv map[interface{}]interface{}) *RedisStore {
+func NewRedisStore(c *redis.Client, prefix, sid string, dur time.Duration, kv map[interface{}]interface{}) *RedisStore {
 	return &RedisStore{
 		c:        c,
+		prefix:   prefix,
 		sid:      sid,
 		duration: dur,
 		data:     kv,
@@ -85,7 +86,7 @@ func (s *RedisStore) Release() error {
 		return err
 	}
 
-	return s.c.SetEx(s.sid, s.duration, string(data)).Err()
+	return s.c.SetEx(s.prefix+s.sid, s.duration, string(data)).Err()
 }
 
 // Flush deletes all session data.
@@ -101,6 +102,7 @@ func (s *RedisStore) Flush() error {
 type RedisProvider struct {
 	c        *redis.Client
 	duration time.Duration
+	prefix   string
 }
 
 // Init initializes redis session provider.
@@ -136,6 +138,8 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 			if err != nil {
 				return fmt.Errorf("error parsing idle timeout: %v", err)
 			}
+		case "prefix":
+			p.prefix = v
 		default:
 			return fmt.Errorf("session/redis: unsupported option '%s'", k)
 		}
@@ -147,14 +151,15 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 
 // Read returns raw session store by session ID.
 func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
+	psid := p.prefix + sid
 	if !p.Exist(sid) {
-		if err := p.c.Set(sid, "").Err(); err != nil {
+		if err := p.c.Set(psid, "").Err(); err != nil {
 			return nil, err
 		}
 	}
 
 	var kv map[interface{}]interface{}
-	kvs, err := p.c.Get(sid).Result()
+	kvs, err := p.c.Get(psid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -167,37 +172,40 @@ func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 		}
 	}
 
-	return NewRedisStore(p.c, sid, p.duration, kv), nil
+	return NewRedisStore(p.c, p.prefix, sid, p.duration, kv), nil
 }
 
 // Exist returns true if session with given ID exists.
 func (p *RedisProvider) Exist(sid string) bool {
-	has, err := p.c.Exists(sid).Result()
+	has, err := p.c.Exists(p.prefix + sid).Result()
 	return err == nil && has
 }
 
 // Destory deletes a session by session ID.
 func (p *RedisProvider) Destory(sid string) error {
-	return p.c.Del(sid).Err()
+	return p.c.Del(p.prefix + sid).Err()
 }
 
 // Regenerate regenerates a session store from old session ID to new one.
 func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err error) {
+	poldsid := p.prefix + oldsid
+	psid := p.prefix + sid
+
 	if p.Exist(sid) {
 		return nil, fmt.Errorf("new sid '%s' already exists", sid)
 	} else if !p.Exist(oldsid) {
 		// Make a fake old session.
-		if err = p.c.SetEx(oldsid, p.duration, "").Err(); err != nil {
+		if err = p.c.SetEx(poldsid, p.duration, "").Err(); err != nil {
 			return nil, err
 		}
 	}
 
-	if err = p.c.Rename(oldsid, sid).Err(); err != nil {
+	if err = p.c.Rename(poldsid, psid).Err(); err != nil {
 		return nil, err
 	}
 
 	var kv map[interface{}]interface{}
-	kvs, err := p.c.Get(sid).Result()
+	kvs, err := p.c.Get(psid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +219,7 @@ func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err 
 		}
 	}
 
-	return NewRedisStore(p.c, sid, p.duration, kv), nil
+	return NewRedisStore(p.c, p.prefix, sid, p.duration, kv), nil
 }
 
 // Count counts and returns number of sessions.
