@@ -9,7 +9,7 @@ Middleware session provides session management for [Macaron](https://github.com/
 ## Getting Help
 
 - [API Reference](https://gowalker.org/github.com/go-macaron/session)
-- [Documentation](http://macaron.gogs.io/docs/middlewares/session)
+- [Documentation](http://go-macaron.com/docs/middlewares/session)
 
 ## Credits
 
