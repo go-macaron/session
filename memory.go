@@ -176,6 +176,9 @@ func (p *MemProvider) Regenerate(oldsid, sid string) (RawStore, error) {
 	}
 
 	s.(*MemStore).sid = sid
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	p.data[sid] = p.list.PushBack(s)
 	return s, nil
 }
