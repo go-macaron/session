@@ -1,5 +1,5 @@
 // Copyright 2013 Beego Authors
-// Copyright 2014 Unknwon
+// Copyright 2014 The Macaron Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -100,15 +100,17 @@ func (s *FileStore) Flush() error {
 
 // FileProvider represents a file session provider implementation.
 type FileProvider struct {
-	lock sync.RWMutex
+	lock        sync.RWMutex
 	maxlifetime int64
 	rootPath    string
 }
 
 // Init initializes file session provider with given root path.
 func (p *FileProvider) Init(maxlifetime int64, rootPath string) error {
+	p.lock.Lock()
 	p.maxlifetime = maxlifetime
 	p.rootPath = rootPath
+	p.lock.Unlock()
 	return nil
 }
 
@@ -173,7 +175,7 @@ func (p *FileProvider) Destory(sid string) error {
 func (p *FileProvider) regenerate(oldsid, sid string) (err error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	
+
 	filename := p.filepath(sid)
 	if com.IsExist(filename) {
 		return fmt.Errorf("new sid '%s' already exists", sid)
@@ -232,12 +234,12 @@ func (p *FileProvider) Count() int {
 
 // GC calls GC to clean expired sessions.
 func (p *FileProvider) GC() {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
 	if !com.IsExist(p.rootPath) {
 		return
 	}
-
-	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	if err := filepath.Walk(p.rootPath, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {

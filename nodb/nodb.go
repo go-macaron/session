@@ -1,4 +1,4 @@
-// Copyright 2015 Unknwon
+// Copyright 2015 The Macaron Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -21,7 +21,7 @@ import (
 	"github.com/lunny/nodb"
 	"github.com/lunny/nodb/config"
 
-	"github.com/macaron-contrib/session"
+	"github.com/go-macaron/session"
 )
 
 // NodbStore represents a nodb session store implementation.

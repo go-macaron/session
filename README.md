@@ -1,21 +1,20 @@
-session [![Build Status](https://drone.io/github.com/macaron-contrib/session/status.png)](https://drone.io/github.com/macaron-contrib/session/latest) [![](http://gocover.io/_badge/github.com/macaron-contrib/session)](http://gocover.io/github.com/macaron-contrib/session)
-=======
+# session [![Build Status](https://travis-ci.org/go-macaron/session.svg?branch=master)](https://travis-ci.org/go-macaron/session) [![](http://gocover.io/_badge/github.com/go-macaron/session)](http://gocover.io/github.com/go-macaron/session)
 
-Middleware session provides session management for [Macaron](https://github.com/Unknwon/macaron). It can use many session providers, including memory, file, Redis, Memcache, PostgreSQL, MySQL, Couchbase, Ledis and Nodb.
+Middleware session provides session management for [Macaron](https://github.com/go-macaron/macaron). It can use many session providers, including memory, file, Redis, Memcache, PostgreSQL, MySQL, Couchbase, Ledis and Nodb.
 
 ### Installation
 
-	go get github.com/macaron-contrib/session
+	go get github.com/go-macaron/session
 	
 ## Getting Help
 
-- [API Reference](https://gowalker.org/github.com/macaron-contrib/session)
+- [API Reference](https://gowalker.org/github.com/go-macaron/session)
 - [Documentation](http://macaron.gogs.io/docs/middlewares/session)
 
 ## Credits
 
-This package is forked from [beego/session](https://github.com/astaxie/beego/tree/master/session) with reconstruction(over 80%).
+This package is a modified version of [beego/session](https://github.com/astaxie/beego/tree/master/session).
 
 ## License
 
-This project is under Apache v2 License. See the [LICENSE](LICENSE) file for the full license text.
+This project is under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for the full license text.
