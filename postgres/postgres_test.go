@@ -65,7 +65,7 @@ func Test_PostgresProvider(t *testing.T) {
 				So(sess.Delete("uname"), ShouldBeNil)
 				So(sess.Get("uname"), ShouldBeNil)
 
-				So(sess.Destory(ctx), ShouldBeNil)
+				So(sess.Destroy(ctx), ShouldBeNil)
 			})
 
 			resp := httptest.NewRecorder()
@@ -98,7 +98,7 @@ func Test_PostgresProvider(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(raw, ShouldNotBeNil)
 
-				So(sess.Destory(ctx), ShouldBeNil)
+				So(sess.Destroy(ctx), ShouldBeNil)
 			})
 
 			resp := httptest.NewRecorder()

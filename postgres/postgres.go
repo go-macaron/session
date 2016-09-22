@@ -150,8 +150,8 @@ func (p *PostgresProvider) Exist(sid string) bool {
 	return err != sql.ErrNoRows
 }
 
-// Destory deletes a session by session ID.
-func (p *PostgresProvider) Destory(sid string) error {
+// Destroy deletes a session by session ID.
+func (p *PostgresProvider) Destroy(sid string) error {
 	_, err := p.c.Exec("DELETE FROM session WHERE key=$1", sid)
 	return err
 }

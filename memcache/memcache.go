@@ -147,8 +147,8 @@ func (p *MemcacheProvider) Exist(sid string) bool {
 	return err == nil
 }
 
-// Destory deletes a session by session ID.
-func (p *MemcacheProvider) Destory(sid string) error {
+// Destroy deletes a session by session ID.
+func (p *MemcacheProvider) Destroy(sid string) error {
 	return p.c.Delete(sid)
 }
 
