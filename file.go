@@ -121,7 +121,7 @@ func (p *FileProvider) filepath(sid string) string {
 // Read returns raw session store by session ID.
 func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 	filename := p.filepath(sid)
-	if err = os.MkdirAll(path.Dir(filename), os.ModePerm); err != nil {
+	if err = os.MkdirAll(path.Dir(filename), 0700); err != nil {
 		return nil, err
 	}
 	p.lock.RLock()
@@ -187,7 +187,7 @@ func (p *FileProvider) regenerate(oldsid, sid string) (err error) {
 		if err != nil {
 			return err
 		}
-		if err = os.MkdirAll(path.Dir(oldname), os.ModePerm); err != nil {
+		if err = os.MkdirAll(path.Dir(oldname), 0700); err != nil {
 			return err
 		}
 		if err = ioutil.WriteFile(oldname, data, os.ModePerm); err != nil {
@@ -195,7 +195,7 @@ func (p *FileProvider) regenerate(oldsid, sid string) (err error) {
 		}
 	}
 
-	if err = os.MkdirAll(path.Dir(filename), os.ModePerm); err != nil {
+	if err = os.MkdirAll(path.Dir(filename), 0700); err != nil {
 		return err
 	}
 	if err = os.Rename(oldname, filename); err != nil {
