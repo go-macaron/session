@@ -86,7 +86,7 @@ func (s *FileStore) Release() error {
 		return err
 	}
 
-	return ioutil.WriteFile(s.p.filepath(s.sid), data, os.ModePerm)
+	return ioutil.WriteFile(s.p.filepath(s.sid), data, 0600)
 }
 
 // Flush deletes all session data.
@@ -129,7 +129,7 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 
 	var f *os.File
 	if com.IsFile(filename) {
-		f, err = os.OpenFile(filename, os.O_RDWR, os.ModePerm)
+		f, err = os.OpenFile(filename, os.O_RDONLY, 0600)
 	} else {
 		f, err = os.Create(filename)
 	}
@@ -190,7 +190,7 @@ func (p *FileProvider) regenerate(oldsid, sid string) (err error) {
 		if err = os.MkdirAll(path.Dir(oldname), 0700); err != nil {
 			return err
 		}
-		if err = ioutil.WriteFile(oldname, data, os.ModePerm); err != nil {
+		if err = ioutil.WriteFile(oldname, data, 0600); err != nil {
 			return err
 		}
 	}
