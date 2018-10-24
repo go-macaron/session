@@ -17,6 +17,7 @@ package session
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -164,6 +165,21 @@ func testProvider(opt Options) {
 			time.Sleep(2 * time.Second)
 			sess.GC()
 			So(sess.Count(), ShouldEqual, 0)
+		})
+
+		resp := httptest.NewRecorder()
+		req, err := http.NewRequest("GET", "/", nil)
+		So(err, ShouldBeNil)
+		m.ServeHTTP(resp, req)
+	})
+
+	Convey("Detect invalid sid", func() {
+		m := macaron.New()
+		m.Use(Sessioner(opt))
+		m.Get("/", func(ctx *macaron.Context, sess Store) {
+			raw, err := sess.Read("../session/ad2c7e3cbecfcf486")
+			So(strings.Contains(err.Error(), "invalid 'sid': "), ShouldBeTrue)
+			So(raw, ShouldBeNil)
 		})
 
 		resp := httptest.NewRecorder()
