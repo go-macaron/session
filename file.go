@@ -165,8 +165,8 @@ func (p *FileProvider) Exist(sid string) bool {
 	return com.IsFile(p.filepath(sid))
 }
 
-// Destory deletes a session by session ID.
-func (p *FileProvider) Destory(sid string) error {
+// Destroy deletes a session by session ID.
+func (p *FileProvider) Destroy(sid string) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	return os.Remove(p.filepath(sid))

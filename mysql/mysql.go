@@ -149,8 +149,8 @@ func (p *MysqlProvider) Exist(sid string) bool {
 	return err != sql.ErrNoRows
 }
 
-// Destory deletes a session by session ID.
-func (p *MysqlProvider) Destory(sid string) error {
+// Destroy deletes a session by session ID.
+func (p *MysqlProvider) Destroy(sid string) error {
 	_, err := p.c.Exec("DELETE FROM session WHERE `key`=?", sid)
 	return err
 }

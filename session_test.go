@@ -105,7 +105,7 @@ func testProvider(opt Options) {
 			So(sess.Delete("uname"), ShouldBeNil)
 			So(sess.Get("uname"), ShouldBeNil)
 
-			So(sess.Destory(ctx), ShouldBeNil)
+			So(sess.Destroy(ctx), ShouldBeNil)
 		})
 
 		resp := httptest.NewRecorder()
