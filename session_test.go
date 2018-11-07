@@ -142,7 +142,7 @@ func testProvider(opt Options) {
 		resp := httptest.NewRecorder()
 		req, err := http.NewRequest("GET", "/", nil)
 		So(err, ShouldBeNil)
-		req.Header.Set("Cookie", "MacaronSession=ad2c7e3cbecfcf486; Path=/;")
+		req.Header.Set("Cookie", "MacaronSession=ad2c7e3cbecfcf48; Path=/;")
 		m.ServeHTTP(resp, req)
 	})
 
