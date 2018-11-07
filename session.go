@@ -27,7 +27,7 @@ import (
 	"gopkg.in/macaron.v1"
 )
 
-const _VERSION = "0.4.0"
+const _VERSION = "0.5.0"
 
 func Version() string {
 	return _VERSION
@@ -251,15 +251,16 @@ func (m *Manager) sessionID() string {
 	return hex.EncodeToString(generateRandomKey(m.opt.IDLength / 2))
 }
 
-// validSessionID tests whether a provided session ID is a valid session ID
+// validSessionID tests whether a provided session ID is a valid session ID.
 func (m *Manager) validSessionID(sid string) (bool, error) {
 	if len(sid) != m.opt.IDLength {
 		return false, errors.New("invalid 'sid': " + sid)
 	}
-	for _, c := range sid {
+
+	for i := range sid {
 		switch {
-		case '0' <= c && c <= '9':
-		case 'a' <= c && c <= 'f':
+		case '0' <= sid[i] && sid[i] <= '9':
+		case 'a' <= sid[i] && sid[i] <= 'f':
 		default:
 			return false, errors.New("invalid 'sid': " + sid)
 		}
