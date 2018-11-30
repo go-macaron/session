@@ -186,6 +186,10 @@ func Sessioner(options ...Options) macaron.Handler {
 
 		ctx.Next()
 
+		if ctx.Req.Header.Get("Upgrade") == "websocket" {
+			return
+		}
+
 		if err = sess.Release(); err != nil {
 			panic("session(release): " + err.Error())
 		}
