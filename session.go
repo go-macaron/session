@@ -191,7 +191,7 @@ func Sessioner(options ...Options) macaron.Handler {
 
 		ctx.Next()
 
-		if ctx.Req.Header.Get("Upgrade") == "websocket" && manager.opt.IgnoreReleaseForWebSocket {
+		if manager.opt.IgnoreReleaseForWebSocket && ctx.Req.Header.Get("Upgrade") == "websocket" {
 			return
 		}
 
