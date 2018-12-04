@@ -95,6 +95,8 @@ type Options struct {
 	IDLength int
 	// Configuration section name. Default is "session".
 	Section string
+	// Ignore release for websocket. Default is false.
+	IgnoreReleaseForWebSocket bool
 }
 
 func prepareOptions(options []Options) Options {
@@ -136,6 +138,9 @@ func prepareOptions(options []Options) Options {
 	}
 	if opt.IDLength == 0 {
 		opt.IDLength = sec.Key("ID_LENGTH").MustInt(16)
+	}
+	if !opt.IgnoreReleaseForWebSocket {
+		opt.IgnoreReleaseForWebSocket = sec.Key("IGNORE_RELEASE_FOR_WEBSOCKET").MustBool()
 	}
 
 	return opt
@@ -185,6 +190,10 @@ func Sessioner(options ...Options) macaron.Handler {
 		ctx.MapTo(s, (*Store)(nil))
 
 		ctx.Next()
+
+		if manager.opt.IgnoreReleaseForWebSocket && ctx.Req.Header.Get("Upgrade") == "websocket" {
+			return
+		}
 
 		if err = sess.Release(); err != nil {
 			panic("session(release): " + err.Error())
