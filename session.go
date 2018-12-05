@@ -27,7 +27,7 @@ import (
 	"gopkg.in/macaron.v1"
 )
 
-const _VERSION = "0.5.0"
+const _VERSION = "0.6.0"
 
 func Version() string {
 	return _VERSION
@@ -355,7 +355,7 @@ func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) 
 	if err != nil {
 		return nil, err
 	}
-	ck := &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     m.opt.CookieName,
 		Value:    sid,
 		Path:     m.opt.CookiePath,
@@ -364,10 +364,10 @@ func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) 
 		Domain:   m.opt.Domain,
 	}
 	if m.opt.CookieLifeTime >= 0 {
-		ck.MaxAge = m.opt.CookieLifeTime
+		cookie.MaxAge = m.opt.CookieLifeTime
 	}
-	http.SetCookie(ctx.Resp, ck)
-	ctx.Req.AddCookie(ck)
+	http.SetCookie(ctx.Resp, cookie)
+	ctx.Req.AddCookie(cookie)
 	return sess, nil
 }
 

@@ -77,6 +77,11 @@ func (s *MysqlStore) ID() string {
 
 // Release releases resource and save data to provider.
 func (s *MysqlStore) Release() error {
+	// Skip encoding if the data is empty
+	if len(s.data) == 0 {
+		return nil
+	}
+
 	data, err := session.EncodeGob(s.data)
 	if err != nil {
 		return err

@@ -68,6 +68,11 @@ func (s *CouchbaseSessionStore) ID() string {
 func (s *CouchbaseSessionStore) Release() error {
 	defer s.b.Close()
 
+	// Skip encoding if the data is empty
+	if len(s.data) == 0 {
+		return nil
+	}
+
 	data, err := session.EncodeGob(s.data)
 	if err != nil {
 		return err
