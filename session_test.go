@@ -188,29 +188,3 @@ func testProvider(opt Options) {
 		m.ServeHTTP(resp, req)
 	})
 }
-
-func Test_Flash(t *testing.T) {
-	Convey("Test flash", t, func() {
-		m := macaron.New()
-		m.Use(Sessioner())
-		m.Get("/set", func(f *Flash) string {
-			f.Success("success")
-			f.Error("error")
-			f.Warning("warning")
-			f.Info("info")
-			return ""
-		})
-		m.Get("/get", func() {})
-
-		resp := httptest.NewRecorder()
-		req, err := http.NewRequest("GET", "/set", nil)
-		So(err, ShouldBeNil)
-		m.ServeHTTP(resp, req)
-
-		resp = httptest.NewRecorder()
-		req, err = http.NewRequest("GET", "/get", nil)
-		So(err, ShouldBeNil)
-		req.Header.Set("Cookie", "macaron_flash=error%3Derror%26info%3Dinfo%26success%3Dsuccess%26warning%3Dwarning; Path=/")
-		m.ServeHTTP(resp, req)
-	})
-}
