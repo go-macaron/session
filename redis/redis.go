@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/Unknwon/com"
+	"github.com/go-redis/redis"
 	"gopkg.in/ini.v1"
-	"gopkg.in/redis.v2"
 
 	"github.com/go-macaron/session"
 )
@@ -91,7 +91,7 @@ func (s *RedisStore) Release() error {
 		return err
 	}
 
-	return s.c.SetEx(s.prefix+s.sid, s.duration, string(data)).Err()
+	return s.c.Set(s.prefix+s.sid, string(data), s.duration).Err()
 }
 
 // Flush deletes all session data.
@@ -135,7 +135,7 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 		case "password":
 			opt.Password = v
 		case "db":
-			opt.DB = com.StrTo(v).MustInt64()
+			opt.DB = com.StrTo(v).MustInt()
 		case "pool_size":
 			opt.PoolSize = com.StrTo(v).MustInt()
 		case "idle_timeout":
@@ -158,7 +158,7 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 	psid := p.prefix + sid
 	if !p.Exist(sid) {
-		if err := p.c.SetEx(psid, p.duration, "").Err(); err != nil {
+		if err := p.c.Set(psid, "", p.duration).Err(); err != nil {
 			return nil, err
 		}
 	}
@@ -182,8 +182,8 @@ func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 
 // Exist returns true if session with given ID exists.
 func (p *RedisProvider) Exist(sid string) bool {
-	has, err := p.c.Exists(p.prefix + sid).Result()
-	return err == nil && has
+	v, err := p.c.Exists(p.prefix + sid).Result()
+	return err == nil && v == 1
 }
 
 // Destory deletes a session by session ID.
@@ -200,7 +200,7 @@ func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err 
 		return nil, fmt.Errorf("new sid '%s' already exists", sid)
 	} else if !p.Exist(oldsid) {
 		// Make a fake old session.
-		if err = p.c.SetEx(poldsid, p.duration, "").Err(); err != nil {
+		if err = p.c.Set(poldsid, "", p.duration).Err(); err != nil {
 			return nil, err
 		}
 	}
