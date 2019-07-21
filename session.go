@@ -54,7 +54,7 @@ type Store interface {
 	RawStore
 	// Read returns raw session store by session ID.
 	Read(string) (RawStore, error)
-	// Destory deletes a session.
+	// Destroy deletes a session.
 	Destory(*macaron.Context) error
 	// RegenerateId regenerates a session store from old session ID to new one.
 	RegenerateId(*macaron.Context) (RawStore, error)
@@ -209,7 +209,7 @@ type Provider interface {
 	Read(sid string) (RawStore, error)
 	// Exist returns true if session with given ID exists.
 	Exist(sid string) bool
-	// Destory deletes a session by session ID.
+	// Destroy deletes a session by session ID.
 	Destory(sid string) error
 	// Regenerate regenerates a session store from old session ID to new one.
 	Regenerate(oldsid, sid string) (RawStore, error)
@@ -318,7 +318,7 @@ func (m *Manager) Read(sid string) (RawStore, error) {
 	return m.provider.Read(sid)
 }
 
-// Destory deletes a session by given ID.
+// Destroy deletes a session by given ID.
 func (m *Manager) Destory(ctx *macaron.Context) error {
 	sid := ctx.GetCookie(m.opt.CookieName)
 	if len(sid) == 0 {

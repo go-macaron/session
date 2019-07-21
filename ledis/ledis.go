@@ -174,7 +174,7 @@ func (p *LedisProvider) Exist(sid string) bool {
 	return err == nil && count > 0
 }
 
-// Destory deletes a session by session ID.
+// Destroy deletes a session by session ID.
 func (p *LedisProvider) Destory(sid string) error {
 	_, err := p.c.Del([]byte(sid))
 	return err

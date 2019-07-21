@@ -89,7 +89,7 @@ type MemProvider struct {
 	lock        sync.RWMutex
 	maxLifetime int64
 	data        map[string]*list.Element
-	// A priority list whose lastAccess newer gets higer priority.
+	// A priority list whose lastAccess newer gets higher priority.
 	list *list.List
 }
 
@@ -145,7 +145,7 @@ func (p *MemProvider) Exist(sid string) bool {
 	return ok
 }
 
-// Destory deletes a session by session ID.
+// Destroy deletes a session by session ID.
 func (p *MemProvider) Destory(sid string) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()

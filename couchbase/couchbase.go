@@ -172,7 +172,7 @@ func (p *CouchbaseProvider) Exist(sid string) bool {
 	}
 }
 
-// Destory deletes a session by session ID.
+// Destroy deletes a session by session ID.
 func (p *CouchbaseProvider) Destory(sid string) error {
 	p.b = p.getBucket()
 	defer p.b.Close()
