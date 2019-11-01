@@ -11,7 +11,7 @@ The minimum requirement of Go is 1.6 (*1.7 if using Redis, 1.9 if using MySQL*).
 ## Getting Help
 
 - [API Reference](https://gowalker.org/github.com/go-macaron/session)
-- [Documentation](https://go-macaron.com/docs/middlewares/session)
+- [Documentation](https://go-macaron.com/middlewares/session)
 
 ## Credits
 
