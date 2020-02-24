@@ -123,6 +123,11 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 		return err
 	}
 
+	section, err := cfg.GetSection("")
+	if err == nil && section != nil && section.Key("ha_mode").Value() == "sentinel" {
+		return p.initSentinel(cfg)
+	}
+
 	opt := &redis.Options{
 		Network: "tcp",
 	}
@@ -151,6 +156,49 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 	}
 
 	p.c = redis.NewClient(opt)
+	return p.c.Ping().Err()
+}
+
+func (p *RedisProvider) initSentinel(cfg *ini.File) (err error) {
+	opt := &redis.FailoverOptions{}
+
+	for k, v := range cfg.Section("").KeysHash() {
+		switch k {
+		case "master_name":
+			opt.MasterName = v
+		case "sentinel_Addrs":
+			opt.SentinelAddrs = strings.Split(v, "|")
+		case "password":
+			opt.Password = v
+		case "db":
+			opt.DB = com.StrTo(v).MustInt64()
+		case "pool_size":
+			opt.PoolSize = com.StrTo(v).MustInt()
+		case "dial_timeout":
+			opt.DialTimeout, err = time.ParseDuration(v + "s")
+			if err != nil {
+				return fmt.Errorf("error parsing dial timeout: %v", err)
+			}
+		case "read_timeout":
+			opt.ReadTimeout, err = time.ParseDuration(v + "s")
+			if err != nil {
+				return fmt.Errorf("error parsing read timeout: %v", err)
+			}
+		case "write_timeout":
+			opt.WriteTimeout, err = time.ParseDuration(v + "s")
+			if err != nil {
+				return fmt.Errorf("error parsing write timeout: %v", err)
+			}
+		case "idle_timeout":
+			opt.IdleTimeout, err = time.ParseDuration(v + "s")
+			if err != nil {
+				return fmt.Errorf("error parsing idle timeout: %v", err)
+			}
+		case "prefix":
+			p.prefix = v
+		}
+	}
+	p.c = redis.NewFailoverClient(opt)
 	return p.c.Ping().Err()
 }
 
