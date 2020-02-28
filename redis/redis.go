@@ -150,7 +150,7 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 			}
 		case "prefix":
 			p.prefix = v
-		case "ha-mode":
+		case "ha_mode":
 			// avoid panic
 		default:
 			return fmt.Errorf("session/redis: unsupported option '%s'", k)
