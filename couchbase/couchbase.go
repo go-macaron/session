@@ -144,6 +144,10 @@ func (p *CouchbaseProvider) Read(sid string) (session.RawStore, error) {
 	var doc []byte
 
 	err := p.b.Get(sid, &doc)
+	if err != nil {
+		return nil, err
+	}
+
 	var kv map[interface{}]interface{}
 	if doc == nil {
 		kv = make(map[interface{}]interface{})
@@ -177,8 +181,7 @@ func (p *CouchbaseProvider) Destory(sid string) error {
 	p.b = p.getBucket()
 	defer p.b.Close()
 
-	p.b.Delete(sid)
-	return nil
+	return p.b.Delete(sid)
 }
 
 // Regenerate regenerates a session store from old session ID to new one.
@@ -187,7 +190,10 @@ func (p *CouchbaseProvider) Regenerate(oldsid, sid string) (session.RawStore, er
 
 	var doc []byte
 	if err := p.b.Get(oldsid, &doc); err != nil || doc == nil {
-		p.b.Set(sid, int(p.maxlifetime), "")
+		err := p.b.Set(sid, int(p.maxlifetime), "")
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		err := p.b.Delete(oldsid)
 		if err != nil {

@@ -79,7 +79,7 @@ func testProvider(opt Options) {
 		m.Use(Sessioner(opt))
 
 		m.Get("/", func(ctx *macaron.Context, sess Store) {
-			sess.Set("uname", "unknwon")
+			So(sess.Set("uname", "unknwon"), ShouldBeNil)
 		})
 		m.Get("/reg", func(ctx *macaron.Context, sess Store) {
 			raw, err := sess.RegenerateId(ctx)
@@ -153,7 +153,7 @@ func testProvider(opt Options) {
 		m.Use(Sessioner(opt2))
 
 		m.Get("/", func(sess Store) {
-			sess.Set("uname", "unknwon")
+			So(sess.Set("uname", "unknwon"), ShouldBeNil)
 			So(sess.ID(), ShouldNotBeEmpty)
 			uname := sess.Get("uname")
 			So(uname, ShouldNotBeNil)
