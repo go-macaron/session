@@ -115,7 +115,7 @@ func Test_MysqlProvider(t *testing.T) {
 			m.Use(session.Sessioner(opt2))
 
 			m.Get("/", func(sess session.Store) {
-				sess.Set("uname", "unknwon")
+				So(sess.Set("uname", "unknwon"), ShouldBeNil)
 				So(sess.ID(), ShouldNotBeEmpty)
 				uname := sess.Get("uname")
 				So(uname, ShouldNotBeNil)
