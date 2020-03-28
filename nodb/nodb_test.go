@@ -37,7 +37,7 @@ func Test_LedisProvider(t *testing.T) {
 			m.Use(session.Sessioner(opt))
 
 			m.Get("/", func(ctx *macaron.Context, sess session.Store) {
-				sess.Set("uname", "unknwon")
+				So(sess.Set("uname", "unknwon"), ShouldBeNil)
 			})
 			m.Get("/reg", func(ctx *macaron.Context, sess session.Store) {
 				raw, err := sess.RegenerateId(ctx)
