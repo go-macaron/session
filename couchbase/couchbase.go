@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/couchbaselabs/go-couchbase"
+	"github.com/couchbase/go-couchbase"
 
 	"github.com/go-macaron/session"
 )
