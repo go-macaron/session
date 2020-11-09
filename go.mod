@@ -4,9 +4,9 @@ go 1.12
 
 require (
 	github.com/bradfitz/gomemcache v0.0.0-20190329173943-551aad21a668
-	github.com/couchbase/gomemcached v0.0.0-20190515232915-c4b4ca0eb21d // indirect
-	github.com/couchbase/goutils v0.0.0-20190315194238-f9d42b11473b // indirect
-	github.com/couchbaselabs/go-couchbase v0.0.0-20190708161019-23e7ca2ce2b7
+	github.com/couchbase/go-couchbase v0.0.0-20201026062457-7b3be89bbd89
+	github.com/couchbase/gomemcached v0.1.0 // indirect
+	github.com/couchbase/goutils v0.0.0-20201030094643-5e82bb967e67 // indirect
 	github.com/cupcake/rdb v0.0.0-20161107195141-43ba34106c76 // indirect
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
