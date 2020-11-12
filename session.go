@@ -20,8 +20,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"gopkg.in/macaron.v1/cookie"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"gopkg.in/macaron.v1"
@@ -99,6 +101,8 @@ type Options struct {
 	Section string
 	// Ignore release for websocket. Default is false.
 	IgnoreReleaseForWebSocket bool
+	// FlashEncryptionKey sets the encryption key for flash messages
+	FlashEncryptionKey string
 }
 
 func prepareOptions(options []Options) Options {
@@ -147,6 +151,12 @@ func prepareOptions(options []Options) Options {
 	if !opt.IgnoreReleaseForWebSocket {
 		opt.IgnoreReleaseForWebSocket = sec.Key("IGNORE_RELEASE_FOR_WEBSOCKET").MustBool()
 	}
+	if len(opt.FlashEncryptionKey) == 0 {
+		opt.FlashEncryptionKey = sec.Key("FLASH_ENCRYPTION_KEY").MustString("")
+	}
+	if len(opt.FlashEncryptionKey) == 0 {
+		opt.FlashEncryptionKey, _ = NewSecret()
+	}
 
 	return opt
 }
@@ -168,21 +178,49 @@ func Sessioner(options ...Options) macaron.Handler {
 		}
 
 		// Get flash.
-		vals, _ := url.ParseQuery(ctx.GetCookie("macaron_flash"))
+		flashCookie := ctx.GetCookie("macaron_flash")
+		decrypted, _ := DecryptSecret(opt.FlashEncryptionKey, flashCookie)
+		vals, _ := url.ParseQuery(decrypted)
 		if len(vals) > 0 {
 			f := &Flash{Values: vals}
 			f.ErrorMsg = f.Get("error")
 			f.SuccessMsg = f.Get("success")
 			f.InfoMsg = f.Get("info")
 			f.WarningMsg = f.Get("warning")
-			ctx.Data["Flash"] = f
-			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath)
+			t, _ := strconv.ParseInt(f.Get("time"), 10, 64)
+			now := time.Now().Unix()
+			if now-t > 0 && now-t < 3600 {
+				ctx.Data["Flash"] = f
+			}
+		}
+
+		sameSite := http.SameSiteLaxMode
+		if opt.CookieSameSite {
+			sameSite = http.SameSiteStrictMode
+		}
+
+		if len(flashCookie) > 0 {
+			ctx.SetCookie("macaron_flash", "", -1, opt.CookiePath,
+				cookie.Domain(opt.Domain),
+				cookie.HTTPOnly(true),
+				cookie.Secure(opt.Secure),
+				cookie.SameSite(sameSite),
+			)
 		}
 
 		f := &Flash{ctx, url.Values{}, "", "", "", ""}
 		ctx.Resp.Before(func(macaron.ResponseWriter) {
+			f.Set("time", strconv.FormatInt(time.Now().Unix(), 10))
 			if flash := f.Encode(); len(flash) > 0 {
-				ctx.SetCookie("macaron_flash", flash, 0, opt.CookiePath)
+				encrypted, err := EncryptSecret(opt.FlashEncryptionKey, flash)
+				if err == nil {
+					ctx.SetCookie("macaron_flash", encrypted, 0, opt.CookiePath,
+						cookie.Domain(opt.Domain),
+						cookie.HTTPOnly(true),
+						cookie.Secure(opt.Secure),
+						cookie.SameSite(sameSite),
+					)
+				}
 			}
 		})
 
@@ -366,6 +404,12 @@ func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) 
 	if err != nil {
 		return nil, err
 	}
+
+	sameSite := http.SameSiteLaxMode
+	if m.opt.CookieSameSite {
+		sameSite = http.SameSiteStrictMode
+	}
+
 	cookie := &http.Cookie{
 		Name:     m.opt.CookieName,
 		Value:    sid,
@@ -373,6 +417,7 @@ func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) 
 		HttpOnly: true,
 		Secure:   m.opt.Secure,
 		Domain:   m.opt.Domain,
+		SameSite: sameSite,
 	}
 	if m.opt.CookieLifeTime >= 0 {
 		cookie.MaxAge = m.opt.CookieLifeTime
