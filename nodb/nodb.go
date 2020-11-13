@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lunny/nodb"
-	"github.com/lunny/nodb/config"
+	"gitea.com/lunny/nodb"
+	"gitea.com/lunny/nodb/config"
 
 	"github.com/go-macaron/session"
 )
