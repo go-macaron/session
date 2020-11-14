@@ -133,7 +133,7 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 	defer p.lock.RUnlock()
 
 	var f *os.File
-	expired := false
+	expired := true
 	if com.IsFile(filename) {
 		modTime, err := com.FileMTime(filename)
 		if err != nil {
