@@ -133,15 +133,15 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 	defer p.lock.RUnlock()
 
 	var f *os.File
-	ok := false
+	expired := false
 	if com.IsFile(filename) {
 		modTime, err := com.FileMTime(filename)
 		if err != nil {
 			return nil, err
 		}
-		ok = (modTime + p.maxlifetime) >= time.Now().Unix()
+		expired = (modTime + p.maxlifetime) < time.Now().Unix()
 	}
-	if ok {
+	if !expired {
 		f, err = os.OpenFile(filename, os.O_RDONLY, 0600)
 	} else {
 		f, err = os.Create(filename)
