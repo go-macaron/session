@@ -135,7 +135,6 @@ func (p *MemProvider) Read(sid string) (_ RawStore, err error) {
 	defer p.lock.Unlock()
 	if ok {
 		p.list.Remove(e)
-		delete(p.data, sid)
 	}
 	s := NewMemStore(sid)
 	p.data[sid] = p.list.PushBack(s)
