@@ -9,7 +9,7 @@ Middleware session provides session management for [Macaron](https://github.com/
 
 ### Installation
 
-The minimum requirement of Go is 1.6 (*1.7 if using Redis, 1.10 if using MySQL*).
+The minimum requirement of Go is 1.6 (*1.13 if using Redis, 1.10 if using MySQL*).
 
 	go get github.com/go-macaron/session
 	
