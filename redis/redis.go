@@ -16,17 +16,21 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/unknwon/com"
 	"gopkg.in/ini.v1"
-	"gopkg.in/redis.v2"
 
 	"github.com/go-macaron/session"
 )
+
+// since we do not use context define global once
+var ctx = context.TODO()
 
 // RedisStore represents a redis session store implementation.
 type RedisStore struct {
@@ -91,7 +95,7 @@ func (s *RedisStore) Release() error {
 		return err
 	}
 
-	return s.c.SetEx(s.prefix+s.sid, s.duration, string(data)).Err()
+	return s.c.Set(ctx, s.prefix+s.sid, string(data), s.duration).Err()
 }
 
 // Flush deletes all session data.
@@ -140,7 +144,7 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 		case "password":
 			opt.Password = v
 		case "db":
-			opt.DB = com.StrTo(v).MustInt64()
+			opt.DB = com.StrTo(v).MustInt()
 		case "pool_size":
 			opt.PoolSize = com.StrTo(v).MustInt()
 		case "idle_timeout":
@@ -158,7 +162,7 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 	}
 
 	p.c = redis.NewClient(opt)
-	return p.c.Ping().Err()
+	return p.c.Ping(ctx).Err()
 }
 
 func (p *RedisProvider) initSentinel(cfg *ini.File) (err error) {
@@ -173,7 +177,7 @@ func (p *RedisProvider) initSentinel(cfg *ini.File) (err error) {
 		case "password":
 			opt.Password = v
 		case "db":
-			opt.DB = com.StrTo(v).MustInt64()
+			opt.DB = com.StrTo(v).MustInt()
 		case "pool_size":
 			opt.PoolSize = com.StrTo(v).MustInt()
 		case "dial_timeout":
@@ -201,20 +205,20 @@ func (p *RedisProvider) initSentinel(cfg *ini.File) (err error) {
 		}
 	}
 	p.c = redis.NewFailoverClient(opt)
-	return p.c.Ping().Err()
+	return p.c.Ping(ctx).Err()
 }
 
 // Read returns raw session store by session ID.
 func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 	psid := p.prefix + sid
 	if !p.Exist(sid) {
-		if err := p.c.SetEx(psid, p.duration, "").Err(); err != nil {
+		if err := p.c.Set(ctx, psid, "", p.duration).Err(); err != nil {
 			return nil, err
 		}
 	}
 
 	var kv map[interface{}]interface{}
-	kvs, err := p.c.Get(psid).Result()
+	kvs, err := p.c.Get(ctx, psid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -232,13 +236,13 @@ func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 
 // Exist returns true if session with given ID exists.
 func (p *RedisProvider) Exist(sid string) bool {
-	has, err := p.c.Exists(p.prefix + sid).Result()
-	return err == nil && has
+	count, err := p.c.Exists(ctx, p.prefix+sid).Result()
+	return err == nil && count == 1
 }
 
 // Destory deletes a session by session ID.
 func (p *RedisProvider) Destory(sid string) error {
-	return p.c.Del(p.prefix + sid).Err()
+	return p.c.Del(ctx, p.prefix+sid).Err()
 }
 
 // Regenerate regenerates a session store from old session ID to new one.
@@ -250,17 +254,17 @@ func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err 
 		return nil, fmt.Errorf("new sid '%s' already exists", sid)
 	} else if !p.Exist(oldsid) {
 		// Make a fake old session.
-		if err = p.c.SetEx(poldsid, p.duration, "").Err(); err != nil {
+		if err = p.c.Set(ctx, poldsid, "", p.duration).Err(); err != nil {
 			return nil, err
 		}
 	}
 
-	if err = p.c.Rename(poldsid, psid).Err(); err != nil {
+	if err = p.c.Rename(ctx, poldsid, psid).Err(); err != nil {
 		return nil, err
 	}
 
 	var kv map[interface{}]interface{}
-	kvs, err := p.c.Get(psid).Result()
+	kvs, err := p.c.Get(ctx, psid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +283,11 @@ func (p *RedisProvider) Regenerate(oldsid, sid string) (_ session.RawStore, err 
 
 // Count counts and returns number of sessions.
 func (p *RedisProvider) Count() int {
-	return int(p.c.DbSize().Val())
+	count, err := p.c.DBSize(ctx).Result()
+	if err != nil {
+		return 0
+	}
+	return int(count)
 }
 
 // GC calls GC to clean expired sessions.
