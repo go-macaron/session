@@ -20,13 +20,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gopkg.in/macaron.v1/cookie"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"gopkg.in/macaron.v1"
+	"gopkg.in/macaron.v1/cookie"
 )
 
 const _VERSION = "0.6.0"
