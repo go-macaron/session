@@ -35,6 +35,8 @@ type MysqlStore struct {
 	data map[interface{}]interface{}
 }
 
+var _ session.RawStore = (*MysqlStore)(nil)
+
 // NewMysqlStore creates and returns a mysql session store.
 func NewMysqlStore(c *sql.DB, sid string, kv map[interface{}]interface{}) *MysqlStore {
 	return &MysqlStore{
@@ -73,6 +75,11 @@ func (s *MysqlStore) Delete(key interface{}) error {
 // ID returns current session ID.
 func (s *MysqlStore) ID() string {
 	return s.sid
+}
+
+// Prefix returns the prefix used for session key
+func (s *MysqlStore) Prefix() string {
+	return ""
 }
 
 // Release releases resource and save data to provider.
@@ -195,6 +202,12 @@ func (p *MysqlProvider) GC() {
 	if _, err := p.c.Exec("DELETE FROM session WHERE  expiry + ? <= UNIX_TIMESTAMP(NOW())", p.expire); err != nil {
 		log.Printf("session/mysql: error garbage collecting: %v", err)
 	}
+}
+
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *MysqlProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func init() {

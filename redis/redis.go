@@ -18,6 +18,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,8 @@ type RedisStore struct {
 	lock        sync.RWMutex
 	data        map[interface{}]interface{}
 }
+
+var _ session.RawStore = (*RedisStore)(nil)
 
 // NewRedisStore creates and returns a redis session store.
 func NewRedisStore(c *redis.Client, prefix, sid string, dur time.Duration, kv map[interface{}]interface{}) *RedisStore {
@@ -83,6 +86,11 @@ func (s *RedisStore) ID() string {
 	return s.sid
 }
 
+// Prefix returns the prefix used for session key
+func (s *RedisStore) Prefix() string {
+	return s.prefix
+}
+
 // Release releases resource and save data to provider.
 func (s *RedisStore) Release() error {
 	// Skip encoding if the data is empty
@@ -107,12 +115,137 @@ func (s *RedisStore) Flush() error {
 	return nil
 }
 
+type RedisHubStore struct {
+	c               *redis.Client
+	uid, sessPrefix string
+	lock            sync.RWMutex
+	cleanup         map[string]struct{}
+	data            map[string]time.Time
+}
+
+var _ session.HubStore = (*RedisHubStore)(nil)
+
+func NewRedisHubStore(c *redis.Client, uid, sessPrefix string, data map[string]time.Time) (*RedisHubStore, error) {
+	return &RedisHubStore{
+		c:          c,
+		uid:        uid,
+		data:       data,
+		cleanup:    make(map[string]struct{}),
+		sessPrefix: sessPrefix,
+	}, nil
+}
+
+func getHubStoreKey(uid string) string {
+	return fmt.Sprintf("sessions.user.%v", uid)
+}
+
+func getHubStoreKeyPattern() string {
+	return "sessions.user.*"
+}
+
+func (h *RedisHubStore) Add(sessionKey string, exp time.Time) error {
+	h.data[sessionKey] = exp
+	return nil
+}
+
+func (h *RedisHubStore) Remove(sessionKey string) error {
+	delete(h.data, sessionKey)
+	h.cleanup[sessionKey] = struct{}{}
+	return nil
+}
+
+func (h *RedisHubStore) RemoveAll() error {
+	for k := range h.data {
+		h.cleanup[k] = struct{}{}
+	}
+	h.data = make(map[string]time.Time)
+	return nil
+}
+
+func (h *RedisHubStore) RemoveExcept(sessionKey string) error {
+	for k := range h.data {
+		h.cleanup[k] = struct{}{}
+	}
+	delete(h.cleanup, sessionKey)
+
+	backupVal := h.data[sessionKey]
+	_ = h.RemoveAll()
+	_ = h.Add(sessionKey, backupVal)
+	return nil
+}
+
+func (h *RedisHubStore) FlushExpired() error {
+	backupData := make(map[string]time.Time)
+	for k, exp := range h.data {
+		backupData[k] = exp
+	}
+	currentTime := time.Now()
+	for k, exp := range backupData {
+		if exp.Before(currentTime) {
+			h.cleanup[k] = struct{}{}
+			delete(h.data, k)
+		}
+	}
+
+	return nil
+}
+
+func (h *RedisHubStore) ReleaseHubData() error {
+	if len(h.data) == 0 {
+		return nil
+	}
+	_ = h.FlushExpired()
+
+	convertedMap := make(map[any]any)
+	for k, exp := range h.data {
+		convertedMap[k] = exp
+	}
+
+	data, err := session.EncodeGob(convertedMap)
+	if err != nil {
+		return err
+	}
+
+	_ = h.executeCleanup()
+
+	hubKey := getHubStoreKey(h.uid)
+	return h.c.Set(ctx, hubKey, string(data), 0).Err()
+}
+
+func (h *RedisHubStore) executeCleanup() error {
+	keys := make([]string, 0)
+	for k := range h.cleanup {
+		keys = append(keys, h.sessPrefix+k)
+	}
+
+	var cleanupBatch = 100
+	var idx = 0
+	for idx < len(keys) {
+		pipeline := h.c.Pipeline()
+		for i := idx; i < min(len(keys), idx+cleanupBatch); i++ {
+			pipeline.Del(ctx, keys[i])
+		}
+		idx += cleanupBatch
+
+		_, err := pipeline.Exec(ctx)
+		if err != nil {
+			slog.Error("failed to cleanup sessions: %v", err)
+			continue
+		}
+	}
+	h.cleanup = make(map[string]struct{})
+
+	return nil
+}
+
 // RedisProvider represents a redis session provider implementation.
 type RedisProvider struct {
 	c        *redis.Client
 	duration time.Duration
 	prefix   string
 }
+
+var _ session.Provider = (*RedisProvider)(nil)
 
 // Init initializes redis session provider.
 // configs: network=tcp,addr=:6379,password=macaron,db=0,pool_size=100,idle_timeout=180,prefix=session;
@@ -224,6 +357,8 @@ func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 	}
 	if len(kvs) == 0 {
 		kv = make(map[interface{}]interface{})
+		kv["_old_uid"] = "0"
+		kv["exp"] = time.Now().Add(p.duration).Add(time.Minute)
 	} else {
 		kv, err = session.DecodeGob([]byte(kvs))
 		if err != nil {
@@ -237,6 +372,11 @@ func (p *RedisProvider) Read(sid string) (session.RawStore, error) {
 // Exist returns true if session with given ID exists.
 func (p *RedisProvider) Exist(sid string) bool {
 	count, err := p.c.Exists(ctx, p.prefix+sid).Result()
+	return err == nil && count == 1
+}
+
+func (p *RedisProvider) checkKeyExistence(key string) bool {
+	count, err := p.c.Exists(ctx, key).Result()
 	return err == nil && count == 1
 }
 
@@ -291,7 +431,115 @@ func (p *RedisProvider) Count() int {
 }
 
 // GC calls GC to clean expired sessions.
-func (_ *RedisProvider) GC() {}
+func (p *RedisProvider) GC() {
+	keyPattern := getHubStoreKeyPattern()
+	countBatchProcess := int64(100)
+
+	var cursor uint64
+	var err error
+	var keys []string
+	var sessionHubData = make(map[string]any)
+	for {
+		keys, cursor, err = p.c.Scan(ctx, cursor, keyPattern, countBatchProcess).Result()
+		if err != nil {
+			slog.Error("garbage collection error:: failed to scan pattern %v", keyPattern)
+			return
+		}
+		if cursor == 0 {
+			break
+		}
+
+		pipeline := p.c.Pipeline()
+		var cmds []*redis.StringCmd
+		for _, key := range keys {
+			cmds = append(cmds, pipeline.Get(ctx, key))
+		}
+
+		_, err = pipeline.Exec(ctx)
+		if err != nil {
+			slog.Error("garbage collection error: failed to execute redis pipeline")
+			continue
+		}
+
+		for i, cmd := range cmds {
+			result, err := cmd.Result()
+			if err != nil {
+				slog.Error("garbage collection error: %v", err)
+				continue
+			}
+			sessionHubData[keys[i]], err = session.DecodeGob([]byte(result))
+			if err != nil {
+				slog.Error("garbage collection error: failed to decode values of key: %v", keys[i])
+				continue
+			}
+		}
+	}
+
+	for k, data := range sessionHubData {
+		parts := strings.Split(k, ".")
+		uid := parts[len(parts)-1]
+
+		if data != nil {
+			parsedData, ok := data.(map[any]any)
+			if !ok {
+				slog.Error("")
+			}
+
+			actualData := make(map[string]time.Time)
+			for k, v := range parsedData {
+				key, ok := k.(string)
+				if !ok {
+					slog.Error("garbage collection error: failed to parse key from interface data")
+					continue
+				}
+				value, ok := v.(time.Time)
+				if !ok {
+					slog.Error("garbage collection error: failed to parse value from interface data")
+					continue
+				}
+
+				actualData[key] = value
+			}
+			hubStore, _ := NewRedisHubStore(p.c, uid, p.prefix, actualData)
+			if err = hubStore.ReleaseHubData(); err != nil {
+				slog.Error("garbage collection error: failed to release hub data for key: %v, err: %v", k, err.Error())
+			}
+			continue
+		}
+
+		slog.Error("garbage collection error: data is empty for key: %v", k)
+	}
+}
+
+// ReadSessionHubStore returns all the sessions of user specified by user id
+func (p *RedisProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	hubKey := getHubStoreKey(uid)
+	if !p.checkKeyExistence(hubKey) {
+		if err := p.c.Set(ctx, hubKey, "", 0).Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	var hubData = make(map[string]time.Time)
+	result, err := p.c.Get(ctx, hubKey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) > 0 {
+		m := make(map[any]any)
+		m, err = session.DecodeGob([]byte(result))
+		if err != nil {
+			return nil, err
+		}
+
+		for k, exp := range m {
+			hubData[k.(string)] = exp.(time.Time)
+		}
+	}
+
+	return NewRedisHubStore(p.c, uid, p.prefix, hubData)
+}
 
 func init() {
 	session.Register("redis", &RedisProvider{})

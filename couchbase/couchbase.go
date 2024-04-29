@@ -16,10 +16,9 @@
 package session
 
 import (
+	"github.com/couchbase/go-couchbase"
 	"strings"
 	"sync"
-
-	"github.com/couchbase/go-couchbase"
 
 	"github.com/go-macaron/session"
 )
@@ -32,6 +31,8 @@ type CouchbaseSessionStore struct {
 	data        map[interface{}]interface{}
 	maxlifetime int64
 }
+
+var _ session.RawStore = (*CouchbaseSessionStore)(nil)
 
 // Set sets value to given key in session.
 func (s *CouchbaseSessionStore) Set(key, val interface{}) error {
@@ -62,6 +63,11 @@ func (s *CouchbaseSessionStore) Delete(key interface{}) error {
 // ID returns current session ID.
 func (s *CouchbaseSessionStore) ID() string {
 	return s.sid
+}
+
+// Prefix returns the prefix used for session key
+func (s *CouchbaseSessionStore) Prefix() string {
+	return ""
 }
 
 // Release releases resource and save data to provider.
@@ -99,18 +105,18 @@ type CouchbaseProvider struct {
 	b           *couchbase.Bucket
 }
 
-func (cp *CouchbaseProvider) getBucket() *couchbase.Bucket {
-	c, err := couchbase.Connect(cp.connStr)
+func (p *CouchbaseProvider) getBucket() *couchbase.Bucket {
+	c, err := couchbase.Connect(p.connStr)
 	if err != nil {
 		return nil
 	}
 
-	pool, err := c.GetPool(cp.pool)
+	pool, err := c.GetPool(p.pool)
 	if err != nil {
 		return nil
 	}
 
-	bucket, err := pool.GetBucket(cp.bucket)
+	bucket, err := pool.GetBucket(p.bucket)
 	if err != nil {
 		return nil
 	}
@@ -228,6 +234,12 @@ func (p *CouchbaseProvider) Count() int {
 
 // GC calls GC to clean expired sessions.
 func (p *CouchbaseProvider) GC() {}
+
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *CouchbaseProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	//TODO implement me
+	panic("implement me")
+}
 
 func init() {
 	session.Register("couchbase", &CouchbaseProvider{})

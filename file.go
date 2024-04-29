@@ -269,6 +269,12 @@ func (p *FileProvider) GC() {
 	}
 }
 
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *FileProvider) ReadSessionHubStore(uid string) (HubStore, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func init() {
 	Register("file", &FileProvider{})
 }

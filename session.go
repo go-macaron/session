@@ -49,11 +49,20 @@ type RawStore interface {
 	Flush() error
 }
 
+const (
+	KeyUserID         = "uid"
+	KeyUsername       = "uname"
+	KeyExpirationTime = "exp"
+)
+
 // Store is the interface that contains all data for one session process with specific ID.
 type Store interface {
 	RawStore
+	HubStore
 	// Read returns raw session store by session ID.
 	Read(string) (RawStore, error)
+	// ReadSessionHubOfUser returns the sessions object by user id
+	ReadSessionHubOfUser(uid string) (HubStore, error)
 	// Destory deletes a session.
 	Destory(*macaron.Context) error
 	// RegenerateId regenerates a session store from old session ID to new one.
@@ -64,12 +73,29 @@ type Store interface {
 	GC()
 }
 
+type HubStore interface {
+	Add(string, time.Time) error
+	Remove(string) error
+	RemoveAll() error
+	RemoveExcept(string) error
+	FlushExpired() error
+	ReleaseHubData() error
+}
+
 type store struct {
 	RawStore
+	HubStore
 	*Manager
 }
 
 var _ Store = &store{}
+
+func IncludeHubStoreToStoreInterface(hubStore HubStore, storeInterface Store) Store {
+	var st = storeInterface.(*store)
+	st.HubStore = hubStore
+
+	return st
+}
 
 // Options represents a struct for specifying configuration options for the session middleware.
 type Options struct {
@@ -186,13 +212,20 @@ func Sessioner(options ...Options) macaron.Handler {
 			}
 		})
 
+		userID := sess.Get(KeyUserID)
+		var hubStore HubStore
+		if userID != nil {
+			hubStore, _ = manager.ReadSessionHubOfUser(userID.(string))
+		}
+
 		ctx.Map(f)
 		s := store{
 			RawStore: sess,
+			HubStore: hubStore,
 			Manager:  manager,
 		}
 
-		ctx.MapTo(s, (*Store)(nil))
+		ctx.MapTo(&s, (*Store)(nil))
 
 		ctx.Next()
 
@@ -200,6 +233,11 @@ func Sessioner(options ...Options) macaron.Handler {
 			return
 		}
 
+		if s.HubStore != nil {
+			if err = s.HubStore.ReleaseHubData(); err != nil {
+				panic("HubStore(release)" + err.Error())
+			}
+		}
 		if err = sess.Release(); err != nil {
 			panic("session(release): " + err.Error())
 		}
@@ -212,6 +250,8 @@ type Provider interface {
 	Init(gclifetime int64, config string) error
 	// Read returns raw session store by session ID.
 	Read(sid string) (RawStore, error)
+	// ReadSessionHubStore returns all the sessions of user specified by user id
+	ReadSessionHubStore(uid string) (HubStore, error)
 	// Exist returns true if session with given ID exists.
 	Exist(sid string) bool
 	// Destory deletes a session by session ID.
@@ -401,4 +441,9 @@ func (m *Manager) startGC() {
 // SetSecure indicates whether to set cookie with HTTPS or not.
 func (m *Manager) SetSecure(secure bool) {
 	m.opt.Secure = secure
+}
+
+// ReadSessionHubOfUser returns all the sessions of user specified by user id
+func (m *Manager) ReadSessionHubOfUser(uid string) (HubStore, error) {
+	return m.provider.ReadSessionHubStore(uid)
 }

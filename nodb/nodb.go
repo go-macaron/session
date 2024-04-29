@@ -33,6 +33,8 @@ type NodbStore struct {
 	data   map[interface{}]interface{}
 }
 
+var _ session.RawStore = (*NodbStore)(nil)
+
 // NewNodbStore creates and returns a ledis session store.
 func NewNodbStore(c *nodb.DB, sid string, expire int64, kv map[interface{}]interface{}) *NodbStore {
 	return &NodbStore{
@@ -72,6 +74,11 @@ func (s *NodbStore) Delete(key interface{}) error {
 // ID returns current session ID.
 func (s *NodbStore) ID() string {
 	return s.sid
+}
+
+// Prefix returns the prefix used for session key
+func (s *NodbStore) Prefix() string {
+	return ""
 }
 
 // Release releases resource and save data to provider.
@@ -202,6 +209,12 @@ func (p *NodbProvider) Count() int {
 
 // GC calls GC to clean expired sessions.
 func (p *NodbProvider) GC() {}
+
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *NodbProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	//TODO implement me
+	panic("implement me")
+}
 
 func init() {
 	session.Register("nodb", &NodbProvider{})
