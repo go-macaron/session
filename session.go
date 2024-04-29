@@ -89,8 +89,8 @@ type Options struct {
 	Secure bool
 	// Cookie life time. Default is 0.
 	CookieLifeTime int
-	// Cookie SameSite default is false (Lax), can be set to true (Strict)
-	CookieSameSite bool
+	// Cookie SameSite default is Lax
+	SameSite http.SameSite
 	// Cookie domain name. Default is empty.
 	Domain string
 	// Session ID length. Default is 16.
@@ -132,8 +132,8 @@ func prepareOptions(options []Options) Options {
 	if !opt.Secure {
 		opt.Secure = sec.Key("SECURE").MustBool()
 	}
-	if !opt.CookieSameSite {
-		opt.CookieSameSite = sec.Key("COOKIE_SAME_SITE").MustBool()
+	if opt.SameSite == 0 {
+		opt.SameSite = http.SameSiteLaxMode
 	}
 	if opt.CookieLifeTime == 0 {
 		opt.CookieLifeTime = sec.Key("COOKIE_LIFE_TIME").MustInt()
@@ -298,8 +298,8 @@ func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
 	}
 
 	sameSite := http.SameSiteLaxMode
-	if m.opt.CookieSameSite {
-		sameSite = http.SameSiteStrictMode
+	if m.opt.SameSite != 0 {
+		sameSite = m.opt.SameSite
 	}
 
 	cookie := &http.Cookie{
