@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"encoding/gob"
 	"io"
+	"time"
 
 	"github.com/unknwon/com"
 )
@@ -33,6 +34,8 @@ func init() {
 	gob.Register(map[int]string{})
 	gob.Register(map[int]int{})
 	gob.Register(map[int]int64{})
+	gob.Register(map[string]time.Time{})
+	gob.Register(time.Time{})
 }
 
 func EncodeGob(obj map[interface{}]interface{}) ([]byte, error) {

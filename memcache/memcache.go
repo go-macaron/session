@@ -34,6 +34,8 @@ type MemcacheStore struct {
 	data   map[interface{}]interface{}
 }
 
+var _ session.RawStore = (*MemcacheStore)(nil)
+
 // NewMemcacheStore creates and returns a memcache session store.
 func NewMemcacheStore(c *memcache.Client, sid string, expire int32, kv map[interface{}]interface{}) *MemcacheStore {
 	return &MemcacheStore{
@@ -81,6 +83,11 @@ func (s *MemcacheStore) Delete(key interface{}) error {
 // ID returns current session ID.
 func (s *MemcacheStore) ID() string {
 	return s.sid
+}
+
+// Prefix returns the prefix used for session key
+func (s *MemcacheStore) Prefix() string {
+	return ""
 }
 
 // Release releases resource and save data to provider.
@@ -198,6 +205,12 @@ func (p *MemcacheProvider) Count() int {
 
 // GC calls GC to clean expired sessions.
 func (p *MemcacheProvider) GC() {}
+
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *MemcacheProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	//TODO implement me
+	panic("implement me")
+}
 
 func init() {
 	session.Register("memcache", &MemcacheProvider{})

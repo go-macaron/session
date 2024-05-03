@@ -37,6 +37,8 @@ type LedisStore struct {
 	data   map[interface{}]interface{}
 }
 
+var _ session.RawStore = (*LedisStore)(nil)
+
 // NewLedisStore creates and returns a ledis session store.
 func NewLedisStore(c *ledis.DB, sid string, expire int64, kv map[interface{}]interface{}) *LedisStore {
 	return &LedisStore{
@@ -76,6 +78,11 @@ func (s *LedisStore) Delete(key interface{}) error {
 // ID returns current session ID.
 func (s *LedisStore) ID() string {
 	return s.sid
+}
+
+// Prefix returns the prefix used for session key
+func (s *LedisStore) Prefix() string {
+	return ""
 }
 
 // Release releases resource and save data to provider.
@@ -220,6 +227,12 @@ func (p *LedisProvider) Count() int {
 // GC calls GC to clean expired sessions.
 func (p *LedisProvider) GC() {
 	// FIXME: wtf???
+}
+
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *LedisProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func init() {

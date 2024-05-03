@@ -35,6 +35,8 @@ type PostgresStore struct {
 	data map[interface{}]interface{}
 }
 
+var _ session.RawStore = (*PostgresStore)(nil)
+
 // NewPostgresStore creates and returns a postgres session store.
 func NewPostgresStore(c *sql.DB, sid string, kv map[interface{}]interface{}) *PostgresStore {
 	return &PostgresStore{
@@ -73,6 +75,11 @@ func (s *PostgresStore) Delete(key interface{}) error {
 // ID returns current session ID.
 func (s *PostgresStore) ID() string {
 	return s.sid
+}
+
+// Prefix returns the prefix used for session key
+func (s *PostgresStore) Prefix() string {
+	return ""
 }
 
 // save postgres session values to database.
@@ -196,6 +203,12 @@ func (p *PostgresProvider) GC() {
 	if _, err := p.c.Exec("DELETE FROM session WHERE EXTRACT(EPOCH FROM NOW()) - expiry > $1", p.maxlifetime); err != nil {
 		log.Printf("session/postgres: error garbage collecting: %v", err)
 	}
+}
+
+// ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
+func (p *PostgresProvider) ReadSessionHubStore(uid string) (session.HubStore, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func init() {

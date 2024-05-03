@@ -217,6 +217,11 @@ func (p *MemProvider) GC() {
 	p.lock.RUnlock()
 }
 
+func (p *MemProvider) ReadSessionHubStore(uid string) (HubStore, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func init() {
 	Register("memory", &MemProvider{})
 }
