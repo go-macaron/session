@@ -78,7 +78,6 @@ type HubStore interface {
 	Remove(string) error
 	RemoveAll() error
 	RemoveExcept(string) error
-	FlushExpired() error
 	ReleaseHubData() error
 }
 

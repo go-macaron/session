@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -103,6 +104,124 @@ func (s *FileStore) Flush() error {
 	return nil
 }
 
+type FileHubStore struct {
+	p               *FileProvider
+	uid, sessPrefix string
+	lock            sync.RWMutex
+	cleanup         map[string]struct{}
+	data            map[string]time.Time
+}
+
+var _ HubStore = (*FileHubStore)(nil)
+
+func NewFileHubStore(p *FileProvider, uid string, data map[string]time.Time) (*FileHubStore, error) {
+	return &FileHubStore{
+		p:       p,
+		uid:     uid,
+		data:    data,
+		cleanup: make(map[string]struct{}),
+	}, nil
+}
+
+func getHubStoreKey(uid string) string {
+	return fmt.Sprintf("sessions.user.%v", uid)
+}
+
+func (h *FileHubStore) Add(sessionKey string, exp time.Time) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	h.data[sessionKey] = exp
+	return nil
+}
+
+func (h *FileHubStore) Remove(sessionKey string) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	delete(h.data, sessionKey)
+	h.cleanup[sessionKey] = struct{}{}
+	return nil
+}
+
+func (h *FileHubStore) RemoveAll() error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	for k := range h.data {
+		h.cleanup[k] = struct{}{}
+	}
+	h.data = make(map[string]time.Time)
+	return nil
+}
+
+func (h *FileHubStore) RemoveExcept(sessionKey string) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	for k := range h.data {
+		h.cleanup[k] = struct{}{}
+	}
+	delete(h.cleanup, sessionKey)
+
+	backupVal := h.data[sessionKey]
+	_ = h.RemoveAll()
+	_ = h.Add(sessionKey, backupVal)
+	return nil
+}
+
+func (h *FileHubStore) flushExpired() error {
+	backupData := make(map[string]time.Time)
+	for k, exp := range h.data {
+		backupData[k] = exp
+	}
+	currentTime := time.Now()
+	for k, exp := range backupData {
+		if exp.Before(currentTime) {
+			h.cleanup[k] = struct{}{}
+			delete(h.data, k)
+		}
+	}
+
+	return nil
+}
+
+func (h *FileHubStore) ReleaseHubData() error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	if len(h.data) == 0 {
+		return nil
+	}
+	_ = h.flushExpired()
+
+	convertedMap := make(map[any]any)
+	for k, exp := range h.data {
+		convertedMap[k] = exp
+	}
+
+	data, err := EncodeGob(convertedMap)
+	if err != nil {
+		return err
+	}
+
+	_ = h.executeCleanup()
+
+	hubKey := getHubStoreKey(h.uid)
+
+	return os.WriteFile(h.p.filepath(hubKey), data, 0600)
+}
+
+func (h *FileHubStore) executeCleanup() error {
+	for sid, _ := range h.cleanup {
+		if err := os.Remove(h.p.filepath(sid)); err != nil {
+			slog.Error("failed to cleanup session: %v", err)
+		}
+	}
+
+	return nil
+}
+
 // FileProvider represents a file session provider implementation.
 type FileProvider struct {
 	lock        sync.RWMutex
@@ -162,6 +281,8 @@ func (p *FileProvider) Read(sid string) (_ RawStore, err error) {
 	}
 	if len(data) == 0 {
 		kv = make(map[interface{}]interface{})
+		kv["_old_uid"] = "0"
+		kv["exp"] = time.Now().Add(time.Duration(p.maxlifetime)).Add(time.Minute)
 	} else {
 		kv, err = DecodeGob(data)
 		if err != nil {
@@ -271,8 +392,43 @@ func (p *FileProvider) GC() {
 
 // ReadSessionHubStore returns the RawStore which manipulates the session hub data of a user
 func (p *FileProvider) ReadSessionHubStore(uid string) (HubStore, error) {
-	//TODO implement me
-	panic("implement me")
+	hubKey := getHubStoreKey(uid)
+	filename := p.filepath(hubKey)
+
+	_, err := os.Stat(p.filepath(hubKey))
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(path.Dir(filename), 0700)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create dirs: %v", err)
+			}
+			if _, err = os.Create(filename); err != nil {
+				return nil, fmt.Errorf("failed to create hub store file: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create hub store file: %v", err)
+		}
+	}
+
+	var hubData = make(map[string]time.Time)
+	result, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) > 0 {
+		m := make(map[any]any)
+		m, err = DecodeGob(result)
+		if err != nil {
+			return nil, err
+		}
+
+		for k, exp := range m {
+			hubData[k.(string)] = exp.(time.Time)
+		}
+	}
+
+	return NewFileHubStore(p, uid, hubData)
 }
 
 func init() {

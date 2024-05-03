@@ -144,17 +144,26 @@ func getHubStoreKeyPattern() string {
 }
 
 func (h *RedisHubStore) Add(sessionKey string, exp time.Time) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	h.data[sessionKey] = exp
 	return nil
 }
 
 func (h *RedisHubStore) Remove(sessionKey string) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	delete(h.data, sessionKey)
 	h.cleanup[sessionKey] = struct{}{}
 	return nil
 }
 
 func (h *RedisHubStore) RemoveAll() error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	for k := range h.data {
 		h.cleanup[k] = struct{}{}
 	}
@@ -163,6 +172,9 @@ func (h *RedisHubStore) RemoveAll() error {
 }
 
 func (h *RedisHubStore) RemoveExcept(sessionKey string) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	for k := range h.data {
 		h.cleanup[k] = struct{}{}
 	}
@@ -174,7 +186,7 @@ func (h *RedisHubStore) RemoveExcept(sessionKey string) error {
 	return nil
 }
 
-func (h *RedisHubStore) FlushExpired() error {
+func (h *RedisHubStore) flushExpired() error {
 	backupData := make(map[string]time.Time)
 	for k, exp := range h.data {
 		backupData[k] = exp
@@ -191,10 +203,13 @@ func (h *RedisHubStore) FlushExpired() error {
 }
 
 func (h *RedisHubStore) ReleaseHubData() error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	if len(h.data) == 0 {
 		return nil
 	}
-	_ = h.FlushExpired()
+	_ = h.flushExpired()
 
 	convertedMap := make(map[any]any)
 	for k, exp := range h.data {
