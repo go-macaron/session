@@ -116,7 +116,7 @@ type RedisProvider struct {
 }
 
 // Init initializes redis session provider.
-// configs: network=tcp,addr=:6379,password=macaron,db=0,pool_size=100,idle_timeout=180,prefix=session,tls=false
+// configs: network=tcp,addr=:6379,password=macaron,db=0,pool_size=100,idle_timeout=180,prefix=session,tls=true
 func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 	p.duration, err = time.ParseDuration(fmt.Sprintf("%ds", maxlifetime))
 	if err != nil {
