@@ -17,6 +17,7 @@ package session
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"sync"
@@ -115,7 +116,7 @@ type RedisProvider struct {
 }
 
 // Init initializes redis session provider.
-// configs: network=tcp,addr=:6379,password=macaron,db=0,pool_size=100,idle_timeout=180,prefix=session;
+// configs: network=tcp,addr=:6379,password=macaron,db=0,pool_size=100,idle_timeout=180,prefix=session,tls=false
 func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 	p.duration, err = time.ParseDuration(fmt.Sprintf("%ds", maxlifetime))
 	if err != nil {
@@ -156,6 +157,10 @@ func (p *RedisProvider) Init(maxlifetime int64, configs string) (err error) {
 			p.prefix = v
 		case "ha_mode":
 			// avoid panic
+		case "tls":
+			opt.TLSConfig = &tls.Config{
+				InsecureSkipVerify: true,
+			}
 		default:
 			return fmt.Errorf("session/redis: unsupported option '%s'", k)
 		}
