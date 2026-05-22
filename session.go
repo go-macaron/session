@@ -71,6 +71,31 @@ type store struct {
 
 var _ Store = &store{}
 
+// dirtyTracker wraps a RawStore and records whether the request mutated the
+// session. Sessioner uses this to skip Release on read-only requests so two
+// concurrent reads of the same session ID cannot race to clobber each other's
+// view of the data on disk (file provider encode-and-writes unconditionally
+// in Release).
+type dirtyTracker struct {
+	RawStore
+	dirty bool
+}
+
+func (d *dirtyTracker) Set(key, val interface{}) error {
+	d.dirty = true
+	return d.RawStore.Set(key, val)
+}
+
+func (d *dirtyTracker) Delete(key interface{}) error {
+	d.dirty = true
+	return d.RawStore.Delete(key)
+}
+
+func (d *dirtyTracker) Flush() error {
+	d.dirty = true
+	return d.RawStore.Flush()
+}
+
 // Options represents a struct for specifying configuration options for the session middleware.
 type Options struct {
 	// Name of provider. Default is "memory".
@@ -187,8 +212,9 @@ func Sessioner(options ...Options) macaron.Handler {
 		})
 
 		ctx.Map(f)
+		tracker := &dirtyTracker{RawStore: sess}
 		s := store{
-			RawStore: sess,
+			RawStore: tracker,
 			Manager:  manager,
 		}
 
@@ -200,6 +226,9 @@ func Sessioner(options ...Options) macaron.Handler {
 			return
 		}
 
+		if !tracker.dirty {
+			return
+		}
 		if err = sess.Release(); err != nil {
 			panic("session(release): " + err.Error())
 		}
